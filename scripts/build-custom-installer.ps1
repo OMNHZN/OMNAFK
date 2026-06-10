@@ -1,3 +1,7 @@
+param(
+  [switch]$KeepBuildCache
+)
+
 $ErrorActionPreference = "Stop"
 
 $repo = Split-Path -Parent $PSScriptRoot
@@ -27,4 +31,15 @@ finally {
 $dist = Join-Path $repo "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 Copy-Item -LiteralPath (Join-Path $srcTauri "target\release\omnafk-setup.exe") -Destination (Join-Path $dist "OMNAFK-Setup.exe") -Force
+
+if (-not $KeepBuildCache) {
+  Push-Location $srcTauri
+  try {
+    & $cargo clean
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 Get-Item -LiteralPath (Join-Path $dist "OMNAFK-Setup.exe")
