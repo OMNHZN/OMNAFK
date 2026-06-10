@@ -19,6 +19,7 @@ const STATE_EVENT: &str = "omnafk://state";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StatePayload {
+    pub version: String,
     pub engine: EngineStatus,
     pub next_tick: Option<u64>,
     pub games: Vec<GameSnapshot>,
@@ -388,6 +389,7 @@ fn apply_live_config(app: &AppHandle, key: &str, payload: &StatePayload) -> Resu
 fn state_payload(engine: &SharedEngine) -> StatePayload {
     let snapshot = engine.snapshot();
     StatePayload {
+        version: env!("CARGO_PKG_VERSION").to_string(),
         engine: snapshot.engine,
         next_tick: snapshot.next_tick,
         games: snapshot.games,

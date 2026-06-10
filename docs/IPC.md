@@ -10,6 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
+  "version": "0.1.6",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
