@@ -9,31 +9,40 @@ use std::{
 };
 use windows::Win32::{
     Foundation::{HWND, LPARAM, WPARAM},
-    System::SystemInformation::GetTickCount64,
+    System::{
+        Power::GetSystemPowerStatus,
+        StationsAndDesktops::{
+            CloseDesktop, OpenInputDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS,
+        },
+        SystemInformation::GetTickCount64,
+    },
     UI::{
         Input::KeyboardAndMouse::{
             GetLastInputInfo, MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD,
             INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, LASTINPUTINFO,
-            MAPVK_VK_TO_VSC, MOUSEEVENTF_MOVE, MOUSEINPUT, VIRTUAL_KEY,
+            MAPVK_VK_TO_VSC, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
+            MOUSEEVENTF_WHEEL, MOUSEINPUT, VIRTUAL_KEY,
         },
         WindowsAndMessaging::{
-            GetForegroundWindow, PostMessageW, SetForegroundWindow, WM_KEYDOWN, WM_KEYUP,
-            WM_MOUSEMOVE,
+            GetForegroundWindow, PostMessageW, SetForegroundWindow, WHEEL_DELTA, WM_KEYDOWN,
+            WM_KEYUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
         },
     },
 };
 
-const HOLD_RECENT_INPUT: Duration = Duration::from_secs(60);
 const KEY_SPACE: u16 = 0x20;
 const KEY_W: u16 = 0x57;
+const KEY_HOLD_BASE_MS: u64 = 25;
 
 #[derive(Debug, Clone)]
 pub struct KeepaliveOptions {
     pub interval: u64,
     pub randomize: bool,
+    pub jitter_pct: u8,
     pub action: ResolvedAction,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
+    pub hold_window_secs: u64,
 }
 
 impl KeepaliveOptions {
@@ -42,9 +51,11 @@ impl KeepaliveOptions {
         Self {
             interval: resolved.interval,
             randomize: config.randomize,
+            jitter_pct: config.jitter_pct,
             action: resolved.action,
             send_without_focus: config.send_without_focus,
             hold_while_playing: config.hold_while_playing,
+            hold_window_secs: config.hold_window_secs,
         }
     }
 
@@ -68,7 +79,8 @@ pub struct TickTimer {
 impl TickTimer {
     pub fn new(now: Instant, options: &KeepaliveOptions, rng: &mut impl Rng) -> Self {
         Self {
-            next_due: now + next_delay(options.interval, options.randomize, rng),
+            next_due: now
+                + next_delay(options.interval, options.randomize, options.jitter_pct, rng),
         }
     }
 
@@ -84,7 +96,8 @@ impl TickTimer {
     }
 
     pub fn reschedule(&mut self, now: Instant, options: &KeepaliveOptions, rng: &mut impl Rng) {
-        self.next_due = now + next_delay(options.interval, options.randomize, rng);
+        self.next_due =
+            now + next_delay(options.interval, options.randomize, options.jitter_pct, rng);
     }
 }
 
@@ -154,28 +167,73 @@ pub fn should_hold(
         && activity.foreground_window() == Some(target.hwnd)
         && activity
             .last_input_age(now)
-            .is_some_and(|age| age <= HOLD_RECENT_INPUT)
+            .is_some_and(|age| age <= Duration::from_secs(options.hold_window_secs.max(1)))
 }
 
-pub fn next_delay(interval_secs: u64, randomize: bool, rng: &mut impl Rng) -> Duration {
-    if !randomize {
+pub fn next_delay(
+    interval_secs: u64,
+    randomize: bool,
+    jitter_pct: u8,
+    rng: &mut impl Rng,
+) -> Duration {
+    if !randomize || jitter_pct == 0 {
         return Duration::from_secs(interval_secs);
     }
 
-    let spread = interval_secs as f64 * 0.15;
+    let spread = interval_secs as f64 * (jitter_pct.min(50) as f64 / 100.0);
     let jitter = rng.gen_range(-spread..=spread);
     let jittered = (interval_secs as f64 + jitter).round().max(1.0) as u64;
     Duration::from_secs(jittered)
+}
+
+/// True when the machine is running on battery power.
+pub fn on_battery() -> bool {
+    let mut status = unsafe { std::mem::zeroed() };
+    if unsafe { GetSystemPowerStatus(&mut status) }.is_err() {
+        return false;
+    }
+    status.ACLineStatus == 0
+}
+
+/// True when the workstation is locked (the input desktop can't be opened).
+pub fn session_locked() -> bool {
+    // DESKTOP_SWITCHDESKTOP (0x0100): fails while the workstation is locked.
+    let desktop = unsafe {
+        OpenInputDesktop(
+            DESKTOP_CONTROL_FLAGS(0),
+            false,
+            DESKTOP_ACCESS_FLAGS(0x0100),
+        )
+    };
+    match desktop {
+        Ok(handle) => {
+            unsafe {
+                let _ = CloseDesktop(handle);
+            }
+            false
+        }
+        Err(_) => true,
+    }
 }
 
 pub fn send_keepalive(
     target: &KeepaliveTarget,
     options: &KeepaliveOptions,
 ) -> Result<(), KeepaliveError> {
+    let hold_ms = key_hold_ms(options.randomize);
     if options.send_without_focus {
-        post_action(target, &options.action)
+        post_action(target, &options.action, hold_ms)
     } else {
         focus_flick_action(target, &options.action)
+    }
+}
+
+/// Vary the down->up delay so taps don't look machine-perfect.
+fn key_hold_ms(randomize: bool) -> u64 {
+    if randomize {
+        rand::thread_rng().gen_range(30..=80)
+    } else {
+        KEY_HOLD_BASE_MS
     }
 }
 
@@ -202,15 +260,40 @@ impl fmt::Display for KeepaliveError {
 
 impl std::error::Error for KeepaliveError {}
 
-fn post_action(target: &KeepaliveTarget, action: &ResolvedAction) -> Result<(), KeepaliveError> {
+fn post_action(
+    target: &KeepaliveTarget,
+    action: &ResolvedAction,
+    hold_ms: u64,
+) -> Result<(), KeepaliveError> {
     let hwnd = hwnd_from_isize(target.hwnd);
     match action {
-        ResolvedAction::SpaceTap => post_key_tap(hwnd, KEY_SPACE, &target.exe),
-        ResolvedAction::WTap => post_key_tap(hwnd, KEY_W, &target.exe),
+        ResolvedAction::SpaceTap => post_key_tap(hwnd, KEY_SPACE, &target.exe, hold_ms),
+        ResolvedAction::WTap => post_key_tap(hwnd, KEY_W, &target.exe, hold_ms),
         ResolvedAction::CameraNudge => {
             post_mouse_move(hwnd, 2, 0, &target.exe)?;
             thread::sleep(Duration::from_millis(25));
             post_mouse_move(hwnd, -2, 0, &target.exe)
+        }
+        ResolvedAction::MouseWiggle => {
+            post_mouse_move(hwnd, 1, 1, &target.exe)?;
+            thread::sleep(Duration::from_millis(25));
+            post_mouse_move(hwnd, -1, -1, &target.exe)
+        }
+        ResolvedAction::ScrollTick => {
+            post_mouse_wheel(hwnd, WHEEL_DELTA as i16, &target.exe)?;
+            thread::sleep(Duration::from_millis(40));
+            post_mouse_wheel(hwnd, -(WHEEL_DELTA as i16), &target.exe)
+        }
+        ResolvedAction::RightClick => {
+            unsafe {
+                PostMessageW(Some(hwnd), WM_RBUTTONDOWN, WPARAM(0x0002), LPARAM(0))
+                    .map_err(|_| KeepaliveError::admin_hint(&target.exe))?;
+            }
+            thread::sleep(Duration::from_millis(hold_ms));
+            unsafe {
+                PostMessageW(Some(hwnd), WM_RBUTTONUP, WPARAM(0), LPARAM(0))
+                    .map_err(|_| KeepaliveError::admin_hint(&target.exe))
+            }
         }
         ResolvedAction::KeySequence(keys) => {
             for key in keys {
@@ -219,7 +302,7 @@ fn post_action(target: &KeepaliveTarget, action: &ResolvedAction) -> Result<(), 
                         "Couldn't send key sequence - record supported keys in Settings to fix this: unsupported key '{key}'."
                     ),
                 })?;
-                post_key_tap(hwnd, vk, &target.exe)?;
+                post_key_tap(hwnd, vk, &target.exe, hold_ms)?;
                 thread::sleep(Duration::from_millis(40));
             }
             Ok(())
@@ -250,7 +333,7 @@ fn focus_flick_action(
     result
 }
 
-fn post_key_tap(hwnd: HWND, vk: u16, exe: &str) -> Result<(), KeepaliveError> {
+fn post_key_tap(hwnd: HWND, vk: u16, exe: &str, hold_ms: u64) -> Result<(), KeepaliveError> {
     unsafe {
         PostMessageW(
             Some(hwnd),
@@ -260,7 +343,7 @@ fn post_key_tap(hwnd: HWND, vk: u16, exe: &str) -> Result<(), KeepaliveError> {
         )
         .map_err(|_| KeepaliveError::admin_hint(exe))?;
     }
-    thread::sleep(Duration::from_millis(25));
+    thread::sleep(Duration::from_millis(hold_ms));
     unsafe {
         PostMessageW(
             Some(hwnd),
@@ -284,11 +367,28 @@ fn post_mouse_move(hwnd: HWND, x: i16, y: i16, exe: &str) -> Result<(), Keepaliv
     }
 }
 
+fn post_mouse_wheel(hwnd: HWND, delta: i16, exe: &str) -> Result<(), KeepaliveError> {
+    let wparam = (delta as u16 as usize) << 16;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEWHEEL, WPARAM(wparam), LPARAM(0))
+            .map_err(|_| KeepaliveError::admin_hint(exe))
+    }
+}
+
 fn send_input_action(action: &ResolvedAction, exe: &str) -> Result<(), KeepaliveError> {
     let inputs = match action {
         ResolvedAction::SpaceTap => key_inputs(KEY_SPACE),
         ResolvedAction::WTap => key_inputs(KEY_W),
         ResolvedAction::CameraNudge => vec![mouse_input(2, 0), mouse_input(-2, 0)],
+        ResolvedAction::MouseWiggle => vec![mouse_input(1, 1), mouse_input(-1, -1)],
+        ResolvedAction::ScrollTick => vec![
+            wheel_input(WHEEL_DELTA as i32),
+            wheel_input(-(WHEEL_DELTA as i32)),
+        ],
+        ResolvedAction::RightClick => vec![
+            mouse_button_input(MOUSEEVENTF_RIGHTDOWN),
+            mouse_button_input(MOUSEEVENTF_RIGHTUP),
+        ],
         ResolvedAction::KeySequence(keys) => keys
             .iter()
             .flat_map(|key| key_name_to_vk(key).map(key_inputs).unwrap_or_default())
@@ -348,6 +448,40 @@ fn mouse_input(x: i32, y: i32) -> INPUT {
     }
 }
 
+fn wheel_input(delta: i32) -> INPUT {
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: delta as u32,
+                dwFlags: MOUSEEVENTF_WHEEL,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+fn mouse_button_input(
+    flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS,
+) -> INPUT {
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
 fn key_lparam(vk: u16, key_up: bool) -> LPARAM {
     let scan = scan_code(vk) as isize;
     let mut value = 1 | (scan << 16);
@@ -396,9 +530,11 @@ mod tests {
         KeepaliveOptions {
             interval: 540,
             randomize: true,
+            jitter_pct: 15,
             action: ResolvedAction::SpaceTap,
             send_without_focus: true,
             hold_while_playing: true,
+            hold_window_secs: 60,
         }
     }
 
@@ -411,15 +547,20 @@ mod tests {
     }
 
     #[test]
-    fn jitter_stays_inside_fifteen_percent_bounds() {
+    fn jitter_stays_inside_configured_bounds() {
         let mut rng = StdRng::seed_from_u64(7);
 
         for _ in 0..200 {
-            let delay = next_delay(540, true, &mut rng).as_secs();
+            let delay = next_delay(540, true, 15, &mut rng).as_secs();
             assert!((459..=621).contains(&delay), "{delay}");
         }
+        for _ in 0..200 {
+            let delay = next_delay(540, true, 30, &mut rng).as_secs();
+            assert!((378..=702).contains(&delay), "{delay}");
+        }
 
-        assert_eq!(next_delay(540, false, &mut rng).as_secs(), 540);
+        assert_eq!(next_delay(540, false, 15, &mut rng).as_secs(), 540);
+        assert_eq!(next_delay(540, true, 0, &mut rng).as_secs(), 540);
     }
 
     #[test]

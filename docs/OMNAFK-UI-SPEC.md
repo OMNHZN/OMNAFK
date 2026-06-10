@@ -120,9 +120,11 @@ There is deliberately **no primary action button**. The engine state is driven b
 
 - Background `--surface`, top border `--border`. Sits at the very bottom of the flyout.
 - Left: state text in Data type:
-  - Dormant: `DORMANT — WATCHING FOR GAMES` in `--text-faint`
-  - Active: `ACTIVE — ELDEN RING — NEXT TICK 04:12` in `--text-dim`, the countdown in `--text` (multiple games: `ACTIVE — 2 GAMES — …`)
-  - Paused (user input): `ACTIVE — HOLDING (YOU'RE PLAYING)`
+  - Dormant: `DORMANT — WATCHING` in `--text-faint`
+  - Active: `AWAKE — ELDEN RING — NEXT TICK 04:12` in `--text-dim`, the countdown in `--text` (multiple marks: `AWAKE — 2 MARKED — …`)
+  - Paused (user input): `AWAKE — HOLDING`
+  - Global pause: `PAUSED — QUIET HOURS`
+  - Snoozed: `SNOOZED — BACK IN 00:24:12`
   - Suspended: `SUSPENDED — NOT WATCHING` in `--text-faint`
 - Right: activity dot (hollow = dormant, solid = active, absent = suspended), then the Suspend control (§3.5).
 - **Pulse line (signature):** a 1px line sits on the very top edge of the status bar. Idle: static `--border`. Armed: every time a keepalive action fires, a white segment sweeps left→right across it over 600ms, then fades. Respect `prefers-reduced-motion` / OS animation settings: replace the sweep with a single 200ms full-line flash.
@@ -241,7 +243,7 @@ Divider, then a 2-column button row: `Import settings` · `Export settings` (sec
 ### 5.5 About
 
 - Centered app glyph (32px), `OMNAFK` Display type, `v1.0.0` Data `--text-faint`.
-- One-line description: `Awake when you aren't.` (Body, `--text-dim`.)
+- One-line description: `Quiet watch for game windows.` (Body, `--text-dim`.)
 - Rows (each a full-width quiet link row, 40px, chevron-right on the right): `Check for updates` · `View on GitHub` · `Report a bug` · `License (MIT)`.
 - Fine print at bottom: `Sending automated input may violate the terms of service of some games. Use at your own discretion.` (Data 11px, `--text-faint`.)
 
@@ -325,7 +327,7 @@ The installer is part of the product and follows the same tokens (§2) exactly �
 
 ### 8.3 Steps
 
-**01 Welcome.** Large glyph (40px), `OMNAFK` display headline, one line: `Awake when you aren't.` Below, Data fineprint: version, size on disk (`~2 MB`), MIT license link. Primary footer button: `INSTALL →` (skips Options, uses defaults — express path) and a quiet text button `Customize` that goes to step 02 instead.
+**01 Welcome.** Large glyph (40px), `OMNAFK` display headline, one line: `Quiet watch for game windows.` Below, Data fineprint: version, size on disk (`~2 MB`), MIT license link. Primary footer button: `INSTALL →` (skips Options, uses defaults — express path) and a quiet text button `Customize` that goes to step 02 instead.
 
 **02 Options.** Settings rows (§4.1, 40px here):
 | Label | Control | Default |

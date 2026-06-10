@@ -1,7 +1,7 @@
 use crate::{
     config,
     engine::{EngineStatus, SharedEngine},
-    flyout, ipc,
+    flyout, ipc, updates,
 };
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -12,25 +12,50 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Wry,
+    AppHandle, Emitter, Wry,
 };
 
 const MENU_TOGGLE_SUSPEND: &str = "toggle_suspend";
 const MENU_OPEN: &str = "open_omnafk";
+const MENU_SETTINGS: &str = "open_settings";
+const MENU_CHECK_UPDATES: &str = "check_updates";
+const MENU_REPORT_BUG: &str = "report_bug";
 const MENU_QUIT: &str = "quit_omnafk";
 
 pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
     let suspend_label = if engine.snapshot().config.suspended {
-        "Resume"
+        "Resume watching"
     } else {
-        "Suspend"
+        "Suspend watching"
     };
     let suspend_item =
         MenuItem::with_id(app, MENU_TOGGLE_SUSPEND, suspend_label, true, None::<&str>)?;
-    let open_item = MenuItem::with_id(app, MENU_OPEN, "Open OMNAFK", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, MENU_OPEN, "Open flyout", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, MENU_SETTINGS, "Settings", true, None::<&str>)?;
+    let update_item = MenuItem::with_id(
+        app,
+        MENU_CHECK_UPDATES,
+        "Check for updates",
+        true,
+        None::<&str>,
+    )?;
+    let bug_item = MenuItem::with_id(app, MENU_REPORT_BUG, "Report a bug", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, MENU_QUIT, "Quit OMNAFK", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&suspend_item, &open_item, &separator, &quit_item])?;
+    let separator_one = PredefinedMenuItem::separator(app)?;
+    let separator_two = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open_item,
+            &settings_item,
+            &update_item,
+            &bug_item,
+            &separator_one,
+            &suspend_item,
+            &separator_two,
+            &quit_item,
+        ],
+    )?;
 
     let tray = TrayIconBuilder::with_id("omnafk-tray")
         .icon(icon_for(EngineStatus::Dormant, false)?)
@@ -77,11 +102,30 @@ fn handle_menu_event(
             if let Err(error) = config::save(&engine.snapshot().config) {
                 tracing::warn!("{error}");
             }
-            let _ = suspend_item.set_text(if suspended { "Resume" } else { "Suspend" });
+            let _ = suspend_item.set_text(if suspended {
+                "Resume watching"
+            } else {
+                "Suspend watching"
+            });
             let _ = ipc::emit_state(app, engine);
         }
         MENU_OPEN => {
             let _ = flyout::open_default(app);
+        }
+        MENU_SETTINGS => {
+            let _ = flyout::open_default(app);
+            let _ = app.emit("omnafk://open-settings", "settings");
+        }
+        MENU_CHECK_UPDATES => {
+            let _ = flyout::open_default(app);
+            let _ = app.emit("omnafk://open-settings", "updates");
+        }
+        MENU_REPORT_BUG => {
+            let repo = engine.snapshot().config.github_repo;
+            match updates::issues_url(&repo).and_then(|url| updates::open_url(&url)) {
+                Ok(()) => {}
+                Err(error) => tracing::warn!("{error}"),
+            }
         }
         MENU_QUIT => {
             engine.stop();
@@ -105,7 +149,11 @@ fn spawn_tray_state_loop(tray: TrayIcon<Wry>, suspend_item: MenuItem<Wry>, engin
                 let _ = tray.set_icon(Some(icon));
             }
             let _ = tray.set_tooltip(Some(tooltip_for(state, snapshot.next_tick)));
-            let _ = suspend_item.set_text(if suspended { "Resume" } else { "Suspend" });
+            let _ = suspend_item.set_text(if suspended {
+                "Resume watching"
+            } else {
+                "Suspend watching"
+            });
         }
     });
 }

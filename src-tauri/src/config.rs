@@ -17,6 +17,12 @@ pub enum KeepaliveAction {
     WTap,
     #[serde(rename = "Camera nudge")]
     CameraNudge,
+    #[serde(rename = "Mouse wiggle")]
+    MouseWiggle,
+    #[serde(rename = "Scroll tick")]
+    ScrollTick,
+    #[serde(rename = "Right click")]
+    RightClick,
     #[serde(rename = "Key sequence…")]
     KeySequence,
     #[serde(rename = "Per-target…")]
@@ -31,6 +37,12 @@ pub enum TargetAction {
     WTap,
     #[serde(rename = "Camera nudge")]
     CameraNudge,
+    #[serde(rename = "Mouse wiggle")]
+    MouseWiggle,
+    #[serde(rename = "Scroll tick")]
+    ScrollTick,
+    #[serde(rename = "Right click")]
+    RightClick,
     #[serde(rename = "Key sequence…")]
     KeySequence,
 }
@@ -41,6 +53,9 @@ impl TargetAction {
             Self::SpaceTap => "Space tap",
             Self::WTap => "W tap",
             Self::CameraNudge => "Camera nudge",
+            Self::MouseWiggle => "Mouse wiggle",
+            Self::ScrollTick => "Scroll tick",
+            Self::RightClick => "Right click",
             Self::KeySequence => "Key sequence…",
         }
     }
@@ -52,6 +67,9 @@ impl KeepaliveAction {
             Self::SpaceTap => "Space tap",
             Self::WTap => "W tap",
             Self::CameraNudge => "Camera nudge",
+            Self::MouseWiggle => "Mouse wiggle",
+            Self::ScrollTick => "Scroll tick",
+            Self::RightClick => "Right click",
             Self::KeySequence => "Key sequence…",
             Self::PerTarget => "Per-target…",
         }
@@ -91,6 +109,70 @@ pub enum UpdateChannel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetView {
+    Clean,
+    All,
+    #[serde(rename = "Games only")]
+    GamesOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetDensity {
+    Compact,
+    Comfortable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetSort {
+    Status,
+    Name,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Accent {
+    Mono,
+    Ice,
+    Ember,
+    Acid,
+    Violet,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TabLabelMode {
+    #[serde(rename = "Active only")]
+    ActiveOnly,
+    Always,
+    #[serde(rename = "Icons only")]
+    IconsOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VersionDisplay {
+    #[serde(rename = "Title + About")]
+    TitleAndAbout,
+    #[serde(rename = "About only")]
+    AboutOnly,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SafetyNoteDisplay {
+    Compact,
+    Full,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdatePromptMode {
+    #[serde(rename = "Card + toast")]
+    CardAndToast,
+    #[serde(rename = "Card only")]
+    CardOnly,
+    #[serde(rename = "Manual only")]
+    ManualOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OverrideVerdict {
     Game,
@@ -102,11 +184,21 @@ pub enum OverrideVerdict {
 pub struct AppConfig {
     pub interval: u64,
     pub randomize: bool,
+    pub jitter_pct: u8,
     pub action: KeepaliveAction,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
+    pub hold_window_secs: u64,
+    pub idle_threshold_mins: u64,
+    pub pause_on_battery: bool,
+    pub pause_when_locked: bool,
+    pub max_session_hours: u64,
+    pub max_session_actions: u64,
+    pub quiet_hours_enabled: bool,
+    pub quiet_start: String,
+    pub quiet_end: String,
     pub manual_mode: bool,
     pub sensitivity: Sensitivity,
     pub autostart: bool,
@@ -114,18 +206,33 @@ pub struct AppConfig {
     pub remember_pin: bool,
     pub notifications: NotificationLevel,
     pub hotkey: String,
+    pub suspend_hotkey: String,
     pub github_repo: String,
     pub update_channel: UpdateChannel,
     pub check_updates_on_launch: bool,
+    pub ignored_update_tag: Option<String>,
     pub pinned: bool,
     pub last_tab: String,
+    pub settings_interface_collapsed: bool,
     pub settings_updates_collapsed: bool,
+    pub general_advanced_collapsed: bool,
+    pub target_view: TargetView,
+    pub target_density: TargetDensity,
+    pub target_sort: TargetSort,
+    pub tab_label_mode: TabLabelMode,
+    pub version_display: VersionDisplay,
+    pub safety_note_display: SafetyNoteDisplay,
+    pub update_prompt_mode: UpdatePromptMode,
+    pub accent: Accent,
+    pub file_logging: bool,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
     pub first_run_notified: bool,
+    pub tour_done: bool,
     pub overrides: BTreeMap<String, BTreeMap<String, OverrideVerdict>>,
     pub profiles: BTreeMap<String, BTreeMap<String, TargetProfile>>,
+    pub paused: BTreeMap<String, BTreeMap<String, bool>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,7 +253,24 @@ pub enum ResolvedAction {
     SpaceTap,
     WTap,
     CameraNudge,
+    MouseWiggle,
+    ScrollTick,
+    RightClick,
     KeySequence(Vec<String>),
+}
+
+impl ResolvedAction {
+    pub fn label(&self) -> String {
+        match self {
+            Self::SpaceTap => "Space tap".to_string(),
+            Self::WTap => "W tap".to_string(),
+            Self::CameraNudge => "Camera nudge".to_string(),
+            Self::MouseWiggle => "Mouse wiggle".to_string(),
+            Self::ScrollTick => "Scroll tick".to_string(),
+            Self::RightClick => "Right click".to_string(),
+            Self::KeySequence(keys) => format!("Keys {}", keys.join("+")),
+        }
+    }
 }
 
 impl Default for AppConfig {
@@ -154,10 +278,20 @@ impl Default for AppConfig {
         Self {
             interval: 540,
             randomize: true,
+            jitter_pct: 15,
             action: KeepaliveAction::SpaceTap,
             key_sequence: Vec::new(),
             send_without_focus: true,
             hold_while_playing: true,
+            hold_window_secs: 60,
+            idle_threshold_mins: 0,
+            pause_on_battery: false,
+            pause_when_locked: false,
+            max_session_hours: 0,
+            max_session_actions: 0,
+            quiet_hours_enabled: false,
+            quiet_start: "23:00".to_string(),
+            quiet_end: "07:00".to_string(),
             manual_mode: false,
             sensitivity: Sensitivity::Standard,
             autostart: true,
@@ -165,17 +299,32 @@ impl Default for AppConfig {
             remember_pin: true,
             notifications: NotificationLevel::ErrorsOnly,
             hotkey: "CTRL+ALT+K".to_string(),
+            suspend_hotkey: String::new(),
             github_repo: DEFAULT_GITHUB_REPO.to_string(),
             update_channel: UpdateChannel::Stable,
             check_updates_on_launch: false,
+            ignored_update_tag: None,
             pinned: false,
             last_tab: "general".to_string(),
+            settings_interface_collapsed: true,
             settings_updates_collapsed: false,
+            general_advanced_collapsed: true,
+            target_view: TargetView::All,
+            target_density: TargetDensity::Compact,
+            target_sort: TargetSort::Status,
+            tab_label_mode: TabLabelMode::ActiveOnly,
+            version_display: VersionDisplay::TitleAndAbout,
+            safety_note_display: SafetyNoteDisplay::Compact,
+            update_prompt_mode: UpdatePromptMode::CardAndToast,
+            accent: Accent::Mono,
+            file_logging: false,
             suspended: false,
             pin_position: None,
             first_run_notified: false,
+            tour_done: false,
             overrides: BTreeMap::new(),
             profiles: BTreeMap::new(),
+            paused: BTreeMap::new(),
         }
     }
 }
@@ -254,10 +403,66 @@ impl AppConfig {
             KeepaliveAction::SpaceTap => ResolvedAction::SpaceTap,
             KeepaliveAction::WTap => ResolvedAction::WTap,
             KeepaliveAction::CameraNudge => ResolvedAction::CameraNudge,
+            KeepaliveAction::MouseWiggle => ResolvedAction::MouseWiggle,
+            KeepaliveAction::ScrollTick => ResolvedAction::ScrollTick,
+            KeepaliveAction::RightClick => ResolvedAction::RightClick,
         };
 
         ResolvedKeepalive { interval, action }
     }
+
+    pub fn is_paused(&self, exe: &str, wclass: &str) -> bool {
+        self.paused
+            .get(&identity_exe_key(exe))
+            .and_then(|classes| classes.get(wclass).copied())
+            .unwrap_or(false)
+    }
+
+    pub fn set_paused(&mut self, exe: &str, wclass: &str, paused: bool) {
+        let exe_key = identity_exe_key(exe);
+        if paused {
+            self.paused
+                .entry(exe_key)
+                .or_default()
+                .insert(wclass.to_string(), true);
+        } else if let Some(classes) = self.paused.get_mut(&exe_key) {
+            classes.remove(wclass);
+            if classes.is_empty() {
+                self.paused.remove(&exe_key);
+            }
+        }
+    }
+
+    /// True when the current local time falls inside the configured quiet window.
+    pub fn in_quiet_hours(&self, now_minutes: u32) -> bool {
+        if !self.quiet_hours_enabled {
+            return false;
+        }
+        let (Some(start), Some(end)) = (parse_hhmm(&self.quiet_start), parse_hhmm(&self.quiet_end))
+        else {
+            return false;
+        };
+        if start == end {
+            return false;
+        }
+        if start < end {
+            (start..end).contains(&now_minutes)
+        } else {
+            // Window wraps past midnight, e.g. 23:00 -> 07:00.
+            now_minutes >= start || now_minutes < end
+        }
+    }
+
+    pub fn ignores_update(&self, tag: &str) -> bool {
+        self.ignored_update_tag.as_deref() == Some(tag)
+    }
+}
+
+pub fn parse_hhmm(value: &str) -> Option<u32> {
+    let (h, m) = value.trim().split_once(':')?;
+    let h: u32 = h.parse().ok()?;
+    let m: u32 = m.parse().ok()?;
+    (h < 24 && m < 60).then_some(h * 60 + m)
 }
 
 pub fn resolved_from_target_action(action: TargetAction, keys: &[String]) -> ResolvedAction {
@@ -265,6 +470,9 @@ pub fn resolved_from_target_action(action: TargetAction, keys: &[String]) -> Res
         TargetAction::SpaceTap => ResolvedAction::SpaceTap,
         TargetAction::WTap => ResolvedAction::WTap,
         TargetAction::CameraNudge => ResolvedAction::CameraNudge,
+        TargetAction::MouseWiggle => ResolvedAction::MouseWiggle,
+        TargetAction::ScrollTick => ResolvedAction::ScrollTick,
+        TargetAction::RightClick => ResolvedAction::RightClick,
         TargetAction::KeySequence => resolved_key_sequence(keys),
     }
 }
@@ -421,6 +629,23 @@ mod tests {
 
         assert_eq!(config.interval, 540);
         assert!(config.randomize);
+        assert_eq!(config.jitter_pct, 15);
+        assert_eq!(config.hold_window_secs, 60);
+        assert_eq!(config.idle_threshold_mins, 0);
+        assert!(!config.pause_on_battery);
+        assert!(!config.pause_when_locked);
+        assert_eq!(config.max_session_hours, 0);
+        assert_eq!(config.max_session_actions, 0);
+        assert!(!config.quiet_hours_enabled);
+        assert_eq!(config.quiet_start, "23:00");
+        assert_eq!(config.quiet_end, "07:00");
+        assert_eq!(config.target_sort, TargetSort::Status);
+        assert_eq!(config.accent, Accent::Mono);
+        assert!(!config.file_logging);
+        assert!(config.suspend_hotkey.is_empty());
+        assert!(config.general_advanced_collapsed);
+        assert!(!config.tour_done);
+        assert!(config.paused.is_empty());
         assert_eq!(config.action, KeepaliveAction::SpaceTap);
         assert!(config.key_sequence.is_empty());
         assert!(config.send_without_focus);
@@ -435,8 +660,16 @@ mod tests {
         assert_eq!(config.github_repo, DEFAULT_GITHUB_REPO);
         assert_eq!(config.update_channel, UpdateChannel::Stable);
         assert!(!config.check_updates_on_launch);
+        assert!(config.ignored_update_tag.is_none());
         assert!(!config.pinned);
         assert_eq!(config.last_tab, "general");
+        assert!(config.settings_interface_collapsed);
+        assert_eq!(config.target_view, TargetView::All);
+        assert_eq!(config.target_density, TargetDensity::Compact);
+        assert_eq!(config.tab_label_mode, TabLabelMode::ActiveOnly);
+        assert_eq!(config.version_display, VersionDisplay::TitleAndAbout);
+        assert_eq!(config.safety_note_display, SafetyNoteDisplay::Compact);
+        assert_eq!(config.update_prompt_mode, UpdatePromptMode::CardAndToast);
         assert!(!config.suspended);
         assert!(config.pin_position.is_none());
         assert!(!config.first_run_notified);
@@ -528,6 +761,39 @@ mod tests {
         let resolved = config.resolve_keepalive("game.exe", "CLASS");
         assert_eq!(resolved.interval, 30);
         assert_eq!(resolved.action, ResolvedAction::CameraNudge);
+    }
+
+    #[test]
+    fn quiet_hours_handles_wraparound_windows() {
+        let mut config = AppConfig {
+            quiet_hours_enabled: true,
+            quiet_start: "23:00".to_string(),
+            quiet_end: "07:00".to_string(),
+            ..AppConfig::default()
+        };
+
+        assert!(config.in_quiet_hours(23 * 60 + 30));
+        assert!(config.in_quiet_hours(3 * 60));
+        assert!(!config.in_quiet_hours(12 * 60));
+
+        config.quiet_start = "09:00".to_string();
+        config.quiet_end = "17:00".to_string();
+        assert!(config.in_quiet_hours(12 * 60));
+        assert!(!config.in_quiet_hours(18 * 60));
+
+        config.quiet_hours_enabled = false;
+        assert!(!config.in_quiet_hours(12 * 60));
+    }
+
+    #[test]
+    fn paused_targets_roundtrip() {
+        let mut config = AppConfig::default();
+        assert!(!config.is_paused("Game.exe", "CLASS"));
+        config.set_paused("Game.exe", "CLASS", true);
+        assert!(config.is_paused("game.exe", "CLASS"));
+        config.set_paused("GAME.EXE", "CLASS", false);
+        assert!(!config.is_paused("game.exe", "CLASS"));
+        assert!(config.paused.is_empty());
     }
 
     #[test]

@@ -11,11 +11,13 @@ use windows::{
         Graphics::Gdi::{
             GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
         },
+        Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY},
         System::{
             ProcessStatus::{K32EnumProcessModulesEx, K32GetModuleBaseNameW, LIST_MODULES_ALL},
             Threading::{
-                OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
-                PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
+                GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
+                PROCESS_NAME_FORMAT, PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
+                PROCESS_VM_READ,
             },
         },
         UI::WindowsAndMessaging::{
@@ -38,6 +40,8 @@ pub struct WindowFacts {
     pub platform_path: bool,
     pub known_game: bool,
     pub negative_class: bool,
+    /// The target process runs elevated (None when we couldn't query it).
+    pub elevated: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -154,11 +158,12 @@ unsafe fn is_candidate_window(hwnd: HWND) -> bool {
         return false;
     }
 
-    let Ok(owner) = GetWindow(hwnd, GW_OWNER) else {
-        return false;
-    };
-    if !owner.is_invalid() {
-        return false;
+    // GetWindow returns Err when the window has no owner (NULL result),
+    // which is the normal case for top-level app/game windows.
+    if let Ok(owner) = GetWindow(hwnd, GW_OWNER) {
+        if !owner.is_invalid() {
+            return false;
+        }
     }
 
     let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
@@ -210,8 +215,47 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
             platform_path,
             known_game,
             negative_class,
+            elevated: process_elevated(pid),
         },
     })
+}
+
+/// Whether the process behind `pid` runs with an elevated token.
+fn process_elevated(pid: u32) -> Option<bool> {
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()? };
+    let result = token_elevated(handle);
+    unsafe {
+        let _ = CloseHandle(handle);
+    }
+    result
+}
+
+/// Whether OMNAFK itself runs elevated.
+pub fn current_process_elevated() -> bool {
+    token_elevated(unsafe { GetCurrentProcess() }).unwrap_or(false)
+}
+
+fn token_elevated(process: windows::Win32::Foundation::HANDLE) -> Option<bool> {
+    let mut token = windows::Win32::Foundation::HANDLE::default();
+    unsafe {
+        OpenProcessToken(process, TOKEN_QUERY, &mut token).ok()?;
+    }
+    let mut elevation = TOKEN_ELEVATION::default();
+    let mut len = 0u32;
+    let queried = unsafe {
+        GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(&mut elevation as *mut _ as *mut std::ffi::c_void),
+            size_of::<TOKEN_ELEVATION>() as u32,
+            &mut len,
+        )
+    };
+    unsafe {
+        let _ = CloseHandle(token);
+    }
+    queried.ok()?;
+    Some(elevation.TokenIsElevated != 0)
 }
 
 #[derive(Debug, Clone)]
@@ -490,6 +534,7 @@ mod tests {
             platform_path: false,
             known_game: false,
             negative_class: false,
+            elevated: None,
         }
     }
 

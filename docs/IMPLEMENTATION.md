@@ -90,7 +90,7 @@ shortcuts, and runs the same visual language for uninstall with "Keep my setting
 The Tauri NSIS bundle remains available as a fallback artifact.
 
 Settings connects OMNAFK to a GitHub Releases repository (`OMNHZN/OMNAFK` by default,
-or any `owner/repo` / GitHub URL), checks Stable or Prerelease channels, opens the
+or any `owner/repo` / GitHub URL), checks stable releases, opens the
 repo/releases/new-issue pages, and can notify on launch when a new release is
 available.
 

@@ -43,35 +43,15 @@ struct GithubAsset {
 
 pub fn check(
     repo: &str,
-    channel: UpdateChannel,
+    _channel: UpdateChannel,
     current_version: &str,
 ) -> Result<UpdateCheck, String> {
     let repo = normalize_repo(repo)?;
-    let url = format!("{GITHUB_API_ROOT}/{repo}/releases?per_page=20");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(12))
-        .user_agent(format!("OMNAFK/{current_version}"))
-        .build()
-        .map_err(|error| {
-            format!(
-                "Couldn't prepare the GitHub update check - restart OMNAFK to fix this: {error}"
-            )
-        })?;
-
-    let releases = client
-        .get(url)
-        .send()
-        .map_err(|error| format!("Couldn't reach GitHub Releases - check your internet connection to fix this: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Couldn't read GitHub Releases for {repo} - check the repository name to fix this: {error}"))?
-        .json::<Vec<GithubRelease>>()
-        .map_err(|error| format!("Couldn't parse GitHub Releases for {repo} - try again later: {error}"))?;
+    let releases = fetch_releases(&repo, current_version)?;
 
     let release = releases
         .into_iter()
-        .find(|release| {
-            !release.draft && (matches!(channel, UpdateChannel::Prerelease) || !release.prerelease)
-        })
+        .find(|release| !release.draft && !release.prerelease)
         .ok_or_else(|| {
             format!("Couldn't find a public release for {repo} on the selected update channel.")
         })?;
@@ -85,7 +65,7 @@ pub fn check(
 
     Ok(UpdateCheck {
         repo,
-        channel,
+        channel: UpdateChannel::Stable,
         current_version: current_version.to_string(),
         latest_version,
         latest_tag: release.tag_name.clone(),
@@ -98,6 +78,69 @@ pub fn check(
         asset_url: asset.map(|asset| asset.browser_download_url),
         notes_excerpt: release.body.and_then(|body| notes_excerpt(&body)),
     })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReleaseNotes {
+    pub tag: String,
+    pub title: String,
+    pub published_at: Option<String>,
+    pub body: String,
+}
+
+/// Full release notes for the latest few stable releases.
+pub fn changelog(
+    repo: &str,
+    _channel: UpdateChannel,
+    current_version: &str,
+) -> Result<Vec<ReleaseNotes>, String> {
+    let repo = normalize_repo(repo)?;
+    let releases = fetch_releases(&repo, current_version)?;
+    Ok(releases
+        .into_iter()
+        .filter(|release| !release.draft && !release.prerelease)
+        .take(5)
+        .map(|release| ReleaseNotes {
+            title: release
+                .name
+                .clone()
+                .unwrap_or_else(|| release.tag_name.clone()),
+            tag: release.tag_name,
+            published_at: release.published_at,
+            body: truncate_notes(release.body.unwrap_or_default(), 1200),
+        })
+        .collect())
+}
+
+fn truncate_notes(body: String, max: usize) -> String {
+    let trimmed = body.trim();
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        format!("{}...", trimmed.chars().take(max).collect::<String>())
+    }
+}
+
+fn fetch_releases(repo: &str, current_version: &str) -> Result<Vec<GithubRelease>, String> {
+    let url = format!("{GITHUB_API_ROOT}/{repo}/releases?per_page=20");
+    let client = Client::builder()
+        .timeout(Duration::from_secs(12))
+        .user_agent(format!("OMNAFK/{current_version}"))
+        .build()
+        .map_err(|error| {
+            format!(
+                "Couldn't prepare the GitHub update check - restart OMNAFK to fix this: {error}"
+            )
+        })?;
+
+    client
+        .get(url)
+        .send()
+        .map_err(|error| format!("Couldn't reach GitHub Releases - check your internet connection to fix this: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Couldn't read GitHub Releases for {repo} - check the repository name to fix this: {error}"))?
+        .json::<Vec<GithubRelease>>()
+        .map_err(|error| format!("Couldn't parse GitHub Releases for {repo} - try again later: {error}"))
 }
 
 pub fn repo_url(repo: &str) -> Result<String, String> {

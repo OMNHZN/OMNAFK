@@ -1,8 +1,24 @@
+use std::io::Write;
+
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(omnafk_embed_payload)");
     println!("cargo:rerun-if-env-changed=OMNAFK_PAYLOAD_EXE");
-    if std::env::var_os("OMNAFK_PAYLOAD_EXE").is_some() {
+    if let Some(payload_path) = std::env::var_os("OMNAFK_PAYLOAD_EXE") {
+        println!("cargo:rerun-if-changed={}", payload_path.to_string_lossy());
+        let raw = std::fs::read(&payload_path).expect("failed to read OMNAFK_PAYLOAD_EXE");
+        let out_dir = std::env::var_os("OUT_DIR").expect("OUT_DIR not set");
+        let gz_path = std::path::Path::new(&out_dir).join("omnafk-payload.gz");
+
+        let file = std::fs::File::create(&gz_path).expect("failed to create payload archive");
+        let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::best());
+        encoder
+            .write_all(&raw)
+            .and_then(|()| encoder.finish().map(|_| ()))
+            .expect("failed to compress payload");
+
         println!("cargo:rustc-cfg=omnafk_embed_payload");
+        println!("cargo:rustc-env=OMNAFK_PAYLOAD_GZ={}", gz_path.display());
+        println!("cargo:rustc-env=OMNAFK_PAYLOAD_RAW_LEN={}", raw.len());
     }
     tauri_build::build();
 }

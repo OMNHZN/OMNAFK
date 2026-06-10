@@ -1,4 +1,4 @@
-use crate::{config, engine::SharedEngine};
+use crate::{config, engine::SharedEngine, ipc};
 use tauri::{
     AppHandle, Manager, PhysicalPosition, Position, Rect, Size, WebviewWindow, WindowEvent,
 };
@@ -59,17 +59,52 @@ pub fn open_default(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn register_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
+    let suspend_hotkey = app
+        .try_state::<SharedEngine>()
+        .map(|engine| engine.snapshot().config.suspend_hotkey)
+        .unwrap_or_default();
+    register_hotkeys(app, hotkey, &suspend_hotkey)
+}
+
+pub fn register_hotkeys(
+    app: &AppHandle,
+    open_hotkey: &str,
+    suspend_hotkey: &str,
+) -> Result<(), String> {
     app.global_shortcut().unregister_all().map_err(|error| {
         format!("Couldn't update the hotkey - restart OMNAFK to fix this: {error}")
     })?;
     app.global_shortcut()
-        .on_shortcut(hotkey, |app, _shortcut, event| {
+        .on_shortcut(open_hotkey, |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
                 let _ = open_default(app);
             }
         })
         .map_err(|error| {
             format!("Couldn't register the hotkey - choose another shortcut to fix this: {error}")
+        })?;
+
+    let suspend_hotkey = suspend_hotkey.trim();
+    if suspend_hotkey.is_empty() || suspend_hotkey.eq_ignore_ascii_case(open_hotkey) {
+        return Ok(());
+    }
+    app.global_shortcut()
+        .on_shortcut(suspend_hotkey, |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Some(engine) = app.try_state::<SharedEngine>() {
+                    let suspended = !engine.snapshot().config.suspended;
+                    engine.update_config(|config| config.suspended = suspended);
+                    if let Err(error) = config::save(&engine.snapshot().config) {
+                        tracing::warn!("{error}");
+                    }
+                    let _ = ipc::emit_state(app, engine.inner());
+                }
+            }
+        })
+        .map_err(|error| {
+            format!(
+                "Couldn't register the suspend hotkey - choose another shortcut to fix this: {error}"
+            )
         })
 }
 

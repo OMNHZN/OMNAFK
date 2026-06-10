@@ -1,9 +1,9 @@
 <p>
-  <img src="assets/github/readme-hero.png" alt="OMNAFK - Awake when you aren't" width="100%">
+  <img src="assets/github/readme-hero.png" alt="OMNAFK Windows tray watcher" width="100%">
 </p>
 
 <p align="center">
-  <strong>Tray-first Windows keepalive for games.</strong>
+  <strong>A quiet Windows tray watcher for game keepalives.</strong>
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 <p align="center">
   <a href="https://github.com/OMNHZN/OMNAFK/releases">
-    <img alt="GitHub release" src="https://img.shields.io/github/v/release/OMNHZN/OMNAFK?include_prereleases&label=release&style=flat-square&color=111111">
+    <img alt="GitHub release" src="https://img.shields.io/github/v/release/OMNHZN/OMNAFK?label=release&style=flat-square&color=111111">
   </a>
   <a href="https://github.com/OMNHZN/OMNAFK/actions/workflows/release.yml">
     <img alt="Release workflow" src="https://img.shields.io/github/actions/workflow/status/OMNHZN/OMNAFK/release.yml?label=build&style=flat-square&color=111111">
@@ -29,15 +29,15 @@
 
 ## What It Does
 
-OMNAFK watches your visible windows, decides which ones look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. It runs from the tray, wakes when a game does, and goes dormant when there is nothing to do.
+OMNAFK watches your visible windows, marks the ones that look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. It runs from the tray, wakes when a marked target appears, and returns to dormancy when there is nothing to do.
 
 ## Highlights
 
-- Detects fullscreen, borderless, and game-platform windows automatically.
+- Sightline detects fullscreen, borderless, and game-platform windows automatically.
 - Sends background keepalive input by default, avoiding focus theft.
 - Skips ticks while you are actively playing.
-- Saves settings and target overrides immediately.
-- Checks GitHub Releases and opens structured bug reports from Settings.
+- Saves settings and target marks immediately.
+- Checks stable GitHub Releases and opens structured bug reports from Settings.
 
 ## Install
 
@@ -47,7 +47,7 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 The app is wired to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check GitHub Releases, open the latest download, open the repository, and start a structured bug report.
 
-Publishing a new version tag, such as `v0.1.1`, builds and attaches the custom setup executable to GitHub Releases.
+Publishing a new stable version tag, such as `v0.1.2`, builds and attaches the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
@@ -89,9 +89,9 @@ Local installer builds are written to `dist\OMNAFK-Setup.exe`.
 <summary>Release checklist</summary>
 
 ```powershell
-git tag v0.1.1
+git tag v0.1.2
 git push origin main
-git push origin v0.1.1
+git push origin v0.1.2
 ```
 
 GitHub Actions builds the Windows installer and publishes it to GitHub Releases. See [docs/RELEASING.md](docs/RELEASING.md) for the full release checklist.
