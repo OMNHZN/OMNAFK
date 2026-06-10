@@ -1,5 +1,5 @@
 use crate::{
-    config::{AppConfig, OverrideVerdict},
+    config::{AppConfig, OverrideVerdict, TargetProfile},
     detector::{self, DetectedWindow, NoGpuUsageProbe, Verdict},
     keepalive::{
         self, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer, Win32ActivityProbe,
@@ -32,6 +32,13 @@ pub enum EngineStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct GameProfileSnapshot {
+    pub action: Option<String>,
+    pub interval: Option<u64>,
+    pub key_sequence: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct GameSnapshot {
     pub title: String,
     pub exe: String,
@@ -42,6 +49,7 @@ pub struct GameSnapshot {
     pub gone: bool,
     pub uptime: u64,
     pub actions: u64,
+    pub profile: GameProfileSnapshot,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +59,7 @@ pub struct EngineSnapshot {
     pub games: Vec<GameSnapshot>,
     pub stats: StatsSnapshot,
     pub config: AppConfig,
+    pub error: Option<String>,
 }
 
 pub type SharedEngine = Arc<Engine>;
@@ -68,6 +77,7 @@ struct EngineInner {
     stats: Stats,
     status: EngineStatus,
     last_cycle: Instant,
+    last_error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -95,6 +105,7 @@ impl Engine {
                 stats: Stats::default(),
                 status: EngineStatus::Dormant,
                 last_cycle: Instant::now(),
+                last_error: None,
             }),
             stop: AtomicBool::new(false),
             worker: Mutex::new(None),
@@ -129,18 +140,25 @@ impl Engine {
             let mut inner = self.inner.write();
             if inner.config.suspended {
                 inner.status = EngineStatus::Suspended;
+                inner.stats.note_dormant();
+                inner.last_error = None;
                 return;
             }
         }
 
         let sensitivity = self.inner.read().config.sensitivity;
         let detected = detector::scan_windows(sensitivity, &NoGpuUsageProbe);
-        self.apply_detection(detected, Instant::now());
+        let mut inner = self.inner.write();
+        inner.apply_detection(detected, Instant::now());
     }
 
     pub fn snapshot(&self) -> EngineSnapshot {
         let inner = self.inner.read();
-        let mut games: Vec<_> = inner.windows.values().map(TrackedWindow::snapshot).collect();
+        let mut games: Vec<_> = inner
+            .windows
+            .values()
+            .map(|window| window.snapshot(&inner.config))
+            .collect();
         games.sort_by_key(|game| (game.effective != Verdict::Game, game.gone, game.exe.clone()));
 
         EngineSnapshot {
@@ -149,6 +167,7 @@ impl Engine {
             games,
             stats: inner.stats.snapshot(),
             config: inner.config.clone(),
+            error: inner.last_error.clone(),
         }
     }
 
@@ -182,29 +201,77 @@ impl Engine {
             window.actions = 0;
         }
     }
+}
 
-    fn apply_detection(&self, detected: Vec<DetectedWindow>, now: Instant) {
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+    }
+}
+
+impl EngineInner {
+    fn clear_timers(&mut self) {
+        for window in self.windows.values_mut() {
+            window.timer = None;
+        }
+    }
+
+    fn apply_suspended_status(&mut self) {
+        if self.config.suspended {
+            self.status = EngineStatus::Suspended;
+            self.stats.note_dormant();
+            self.last_error = None;
+        } else if self.status == EngineStatus::Suspended {
+            self.status = EngineStatus::Dormant;
+        }
+    }
+
+    fn recompute_effective(&mut self, now: Instant) {
+        let mut rng = thread_rng();
+
+        for window in self.windows.values_mut() {
+            let override_verdict = self.config.override_for(&window.exe, &window.wclass);
+            window.overridden = override_verdict.is_some();
+            window.effective = match (self.config.manual_mode, override_verdict) {
+                (true, Some(OverrideVerdict::Game)) => Verdict::Game,
+                (true, _) => Verdict::Ignored,
+                (false, Some(OverrideVerdict::Game)) => Verdict::Game,
+                (false, Some(OverrideVerdict::Ignored)) => Verdict::Ignored,
+                (false, None) => window.verdict,
+            };
+
+            if window.effective == Verdict::Game && window.gone_since.is_none() {
+                if window.timer.is_none() {
+                    let options =
+                        KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
+                    window.timer = Some(TickTimer::new(now, &options, &mut rng));
+                }
+            } else {
+                window.timer = None;
+            }
+        }
+    }
+
+    fn apply_detection(&mut self, detected: Vec<DetectedWindow>, now: Instant) {
         let activity = Win32ActivityProbe;
         let mut rng = thread_rng();
-        let mut inner = self.inner.write();
         let elapsed = now
-            .checked_duration_since(inner.last_cycle)
+            .checked_duration_since(self.last_cycle)
             .unwrap_or_default()
             .as_secs();
-        inner.last_cycle = now;
+        self.last_cycle = now;
 
         let mut seen = BTreeSet::new();
         for detected in detected {
             let identity = identity_key(&detected.facts.exe, &detected.facts.wclass);
             seen.insert(identity.clone());
-            let effective = effective_verdict(&inner.config, &detected);
-            let overridden = inner
+            let effective = effective_verdict(&self.config, &detected);
+            let overridden = self
                 .config
                 .override_for(&detected.facts.exe, &detected.facts.wclass)
                 .is_some();
 
-            inner
-                .windows
+            self.windows
                 .entry(identity.clone())
                 .and_modify(|window| {
                     window.title = detected.facts.title.clone();
@@ -233,67 +300,24 @@ impl Engine {
                 });
 
             if effective == Verdict::Game {
-                inner.stats.note_seen_today(&identity);
+                self.stats.note_seen_today(&identity);
             }
         }
 
-        for (identity, window) in inner.windows.iter_mut() {
+        for (identity, window) in self.windows.iter_mut() {
             if !seen.contains(identity) && window.gone_since.is_none() {
                 window.gone_since = Some(now);
             }
         }
 
-        inner
-            .windows
-            .retain(|_, window| window.gone_since.is_none_or(|gone| now.duration_since(gone) <= GONE_LINGER));
+        self.windows.retain(|_, window| {
+            window
+                .gone_since
+                .is_none_or(|gone| now.duration_since(gone) <= GONE_LINGER)
+        });
 
-        inner.recompute_effective(now);
-        inner.drive_keepalives(now, elapsed, &activity, &mut rng);
-    }
-}
-
-impl Drop for Engine {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
-    }
-}
-
-impl EngineInner {
-    fn clear_timers(&mut self) {
-        for window in self.windows.values_mut() {
-            window.timer = None;
-        }
-    }
-
-    fn apply_suspended_status(&mut self) {
-        if self.config.suspended {
-            self.status = EngineStatus::Suspended;
-        }
-    }
-
-    fn recompute_effective(&mut self, now: Instant) {
-        let options = KeepaliveOptions::from(&self.config);
-        let mut rng = thread_rng();
-
-        for window in self.windows.values_mut() {
-            let override_verdict = self.config.override_for(&window.exe, &window.wclass);
-            window.overridden = override_verdict.is_some();
-            window.effective = match (self.config.manual_mode, override_verdict) {
-                (true, Some(OverrideVerdict::Game)) => Verdict::Game,
-                (true, _) => Verdict::Ignored,
-                (false, Some(OverrideVerdict::Game)) => Verdict::Game,
-                (false, Some(OverrideVerdict::Ignored)) => Verdict::Ignored,
-                (false, None) => window.verdict,
-            };
-
-            if window.effective == Verdict::Game && window.gone_since.is_none() {
-                if window.timer.is_none() {
-                    window.timer = Some(TickTimer::new(now, &options, &mut rng));
-                }
-            } else {
-                window.timer = None;
-            }
-        }
+        self.recompute_effective(now);
+        self.drive_keepalives(now, elapsed, &activity, &mut rng);
     }
 
     fn drive_keepalives(
@@ -305,10 +329,11 @@ impl EngineInner {
     ) {
         if self.config.suspended {
             self.status = EngineStatus::Suspended;
+            self.stats.note_dormant();
+            self.last_error = None;
             return;
         }
 
-        let options = KeepaliveOptions::from(&self.config);
         let mut active_count = 0;
         let mut holding = false;
 
@@ -324,9 +349,11 @@ impl EngineInner {
             }
             self.stats.note_seen_today(identity);
 
+            let options = KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
             let target = KeepaliveTarget {
                 hwnd: window.hwnd,
                 exe: window.exe.clone(),
+                wclass: window.wclass.clone(),
             };
 
             if keepalive::should_hold(&target, &options, now, activity) {
@@ -348,8 +375,12 @@ impl EngineInner {
                         Ok(()) => {
                             window.actions = window.actions.saturating_add(1);
                             self.stats.note_action();
+                            self.last_error = None;
                         }
-                        Err(error) => tracing::warn!("{error}"),
+                        Err(error) => {
+                            self.last_error = Some(error.to_string());
+                            tracing::warn!("{error}");
+                        }
                     }
                     timer.reschedule(now, &options, rng);
                 }
@@ -357,6 +388,8 @@ impl EngineInner {
         }
 
         self.status = if active_count == 0 {
+            self.stats.note_dormant();
+            self.last_error = None;
             EngineStatus::Dormant
         } else if holding {
             EngineStatus::Holding
@@ -380,7 +413,12 @@ impl EngineInner {
 }
 
 impl TrackedWindow {
-    fn snapshot(&self) -> GameSnapshot {
+    fn snapshot(&self, config: &AppConfig) -> GameSnapshot {
+        let profile = config
+            .profile_for(&self.exe, &self.wclass)
+            .cloned()
+            .unwrap_or_default();
+
         GameSnapshot {
             title: if self.gone_since.is_some() {
                 format!("{} (closed)", self.title)
@@ -395,7 +433,16 @@ impl TrackedWindow {
             gone: self.gone_since.is_some(),
             uptime: self.uptime,
             actions: self.actions,
+            profile: profile_snapshot(&profile),
         }
+    }
+}
+
+fn profile_snapshot(profile: &TargetProfile) -> GameProfileSnapshot {
+    GameProfileSnapshot {
+        action: profile.action.map(|action| action.label().to_string()),
+        interval: profile.interval,
+        key_sequence: profile.key_sequence.clone(),
     }
 }
 

@@ -93,6 +93,7 @@ pub fn run() {
             ipc::get_state,
             ipc::set_config,
             ipc::cycle_override,
+            ipc::set_target_profile,
             ipc::rescan,
             ipc::set_suspended,
             ipc::set_pinned,

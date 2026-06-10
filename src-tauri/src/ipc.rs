@@ -1,7 +1,7 @@
 use crate::{
     config::{
-        self, AppConfig, KeepaliveAction, NotificationLevel, OverrideVerdict, Sensitivity,
-        UpdateChannel,
+        self, validate_key_sequence, AppConfig, KeepaliveAction, NotificationLevel,
+        OverrideVerdict, Sensitivity, TargetAction, UpdateChannel,
     },
     engine::{EngineStatus, GameSnapshot, SharedEngine},
     flyout,
@@ -24,6 +24,7 @@ pub struct StatePayload {
     pub games: Vec<GameSnapshot>,
     pub stats: StatsSnapshot,
     pub config: ConfigPayload,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +32,7 @@ pub struct ConfigPayload {
     pub interval: u64,
     pub randomize: bool,
     pub action: KeepaliveAction,
+    pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
     pub manual_mode: bool,
@@ -44,6 +46,8 @@ pub struct ConfigPayload {
     pub update_channel: UpdateChannel,
     pub check_updates_on_launch: bool,
     pub pinned: bool,
+    pub last_tab: String,
+    pub settings_updates_collapsed: bool,
 }
 
 impl From<&AppConfig> for ConfigPayload {
@@ -52,6 +56,7 @@ impl From<&AppConfig> for ConfigPayload {
             interval: config.interval,
             randomize: config.randomize,
             action: config.action,
+            key_sequence: config.key_sequence.clone(),
             send_without_focus: config.send_without_focus,
             hold_while_playing: config.hold_while_playing,
             manual_mode: config.manual_mode,
@@ -65,6 +70,8 @@ impl From<&AppConfig> for ConfigPayload {
             update_channel: config.update_channel,
             check_updates_on_launch: config.check_updates_on_launch,
             pinned: config.pinned,
+            last_tab: config.last_tab.clone(),
+            settings_updates_collapsed: config.settings_updates_collapsed,
         }
     }
 }
@@ -81,9 +88,12 @@ pub fn set_config(
     app: AppHandle,
     engine: State<'_, SharedEngine>,
 ) -> Result<StatePayload, String> {
-    let payload = mutate_config(&app, engine.inner(), |config| {
-        apply_config_value(config, &key, value)
-    })?;
+    let payload = mutate_config_with_reschedule(
+        &app,
+        engine.inner(),
+        config_key_reschedules(&key),
+        |config| apply_config_value(config, &key, value),
+    )?;
     apply_live_config(&app, &key, &payload)?;
     Ok(payload)
 }
@@ -102,6 +112,48 @@ pub fn cycle_override(
             Some(OverrideVerdict::Ignored) => None,
         };
         config.set_override(&exe, &wclass, next);
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn set_target_profile(
+    exe: String,
+    wclass: String,
+    action: Option<String>,
+    interval: Option<u64>,
+    key_sequence: Option<Vec<String>>,
+    app: AppHandle,
+    engine: State<'_, SharedEngine>,
+) -> Result<StatePayload, String> {
+    mutate_config(&app, engine.inner(), |config| {
+        let mut profile = config
+            .profile_for(&exe, &wclass)
+            .cloned()
+            .unwrap_or_default();
+
+        profile.action = match action.as_deref() {
+            None | Some("") | Some("Use global") => None,
+            Some(label) => Some(parse_target_action(label)?),
+        };
+
+        profile.interval = match interval {
+            Some(secs) if (10..=3600).contains(&secs) => Some(secs),
+            Some(_) => {
+                return Err(
+                    "Couldn't set profile interval - choose 10 to 3600 seconds to fix this."
+                        .to_string(),
+                );
+            }
+            None => None,
+        };
+
+        if let Some(keys) = key_sequence {
+            validate_key_sequence(&keys)?;
+            profile.key_sequence = keys;
+        }
+
+        config.set_profile(&exe, &wclass, profile);
         Ok(())
     })
 }
@@ -290,9 +342,22 @@ fn mutate_config(
     engine: &SharedEngine,
     update: impl FnOnce(&mut AppConfig) -> Result<(), String>,
 ) -> Result<StatePayload, String> {
+    mutate_config_with_reschedule(app, engine, true, update)
+}
+
+fn mutate_config_with_reschedule(
+    app: &AppHandle,
+    engine: &SharedEngine,
+    reschedule: bool,
+    update: impl FnOnce(&mut AppConfig) -> Result<(), String>,
+) -> Result<StatePayload, String> {
     let mut config = engine.snapshot().config;
     update(&mut config)?;
-    engine.replace_config(config);
+    if reschedule {
+        engine.replace_config(config);
+    } else {
+        engine.update_config_without_reschedule(|current| *current = config);
+    }
     persist_config(engine)?;
     emit_and_return(app, engine)
 }
@@ -328,6 +393,7 @@ fn state_payload(engine: &SharedEngine) -> StatePayload {
         games: snapshot.games,
         stats: snapshot.stats,
         config: ConfigPayload::from(&snapshot.config),
+        error: snapshot.error,
     }
 }
 
@@ -353,7 +419,21 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
         "remember_pin" => config.remember_pin = bool_value(value, key)?,
         "check_updates_on_launch" => config.check_updates_on_launch = bool_value(value, key)?,
         "pinned" => config.pinned = bool_value(value, key)?,
+        "settings_updates_collapsed" => config.settings_updates_collapsed = bool_value(value, key)?,
         "action" => config.action = parse_action(string_value(value, key)?.as_str())?,
+        "key_sequence" => {
+            let keys = value
+                .as_array()
+                .ok_or_else(|| {
+                    "Couldn't save key sequence - use a list of key names to fix this.".to_string()
+                })?
+                .iter()
+                .filter_map(|item| item.as_str().map(|s| s.trim().to_ascii_uppercase()))
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>();
+            validate_key_sequence(&keys)?;
+            config.key_sequence = keys;
+        }
         "sensitivity" => {
             config.sensitivity = parse_sensitivity(string_value(value, key)?.as_str())?
         }
@@ -380,6 +460,12 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
             }
             config.hotkey = hotkey.trim().to_ascii_uppercase();
         }
+        "last_tab" => {
+            let tab = string_value(value, key)?;
+            if is_valid_tab(&tab) {
+                config.last_tab = tab;
+            }
+        }
         other => {
             return Err(format!(
                 "Couldn't save setting '{other}' - update the frontend to use a supported config key."
@@ -387,6 +473,24 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
         }
     }
     Ok(())
+}
+
+fn config_key_reschedules(key: &str) -> bool {
+    matches!(
+        key,
+        "interval"
+            | "randomize"
+            | "send_without_focus"
+            | "hold_while_playing"
+            | "manual_mode"
+            | "action"
+            | "key_sequence"
+            | "sensitivity"
+    )
+}
+
+fn is_valid_tab(tab: &str) -> bool {
+    matches!(tab, "general" | "targets" | "stats" | "settings" | "about")
 }
 
 fn bool_value(value: Value, key: &str) -> Result<bool, String> {
@@ -407,8 +511,23 @@ fn parse_action(value: &str) -> Result<KeepaliveAction, String> {
         "Space tap" => Ok(KeepaliveAction::SpaceTap),
         "W tap" => Ok(KeepaliveAction::WTap),
         "Camera nudge" => Ok(KeepaliveAction::CameraNudge),
+        "Key sequence…" => Ok(KeepaliveAction::KeySequence),
+        "Per-target…" => Ok(KeepaliveAction::PerTarget),
         _ => Err(
-            "Couldn't set action - choose Space tap, W tap, or Camera nudge to fix this."
+            "Couldn't set action - choose Space tap, W tap, Camera nudge, Key sequence…, or Per-target… to fix this."
+                .to_string(),
+        ),
+    }
+}
+
+fn parse_target_action(value: &str) -> Result<TargetAction, String> {
+    match value {
+        "Space tap" => Ok(TargetAction::SpaceTap),
+        "W tap" => Ok(TargetAction::WTap),
+        "Camera nudge" => Ok(TargetAction::CameraNudge),
+        "Key sequence…" => Ok(TargetAction::KeySequence),
+        _ => Err(
+            "Couldn't set profile action - choose Space tap, W tap, Camera nudge, or Key sequence… to fix this."
                 .to_string(),
         ),
     }

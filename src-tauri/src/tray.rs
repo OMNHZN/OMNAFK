@@ -3,7 +3,11 @@ use crate::{
     engine::{EngineStatus, SharedEngine},
     flyout, ipc,
 };
-use std::{sync::atomic::{AtomicBool, Ordering}, thread, time::Duration};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
+    time::Duration,
+};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -21,7 +25,8 @@ pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
     } else {
         "Suspend"
     };
-    let suspend_item = MenuItem::with_id(app, MENU_TOGGLE_SUSPEND, suspend_label, true, None::<&str>)?;
+    let suspend_item =
+        MenuItem::with_id(app, MENU_TOGGLE_SUSPEND, suspend_label, true, None::<&str>)?;
     let open_item = MenuItem::with_id(app, MENU_OPEN, "Open OMNAFK", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, MENU_QUIT, "Quit OMNAFK", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -112,7 +117,11 @@ fn tooltip_for(state: EngineStatus, next_tick: Option<u64>) -> String {
         EngineStatus::Holding => "OMNAFK - HOLDING".to_string(),
         EngineStatus::Active => {
             let next = next_tick.unwrap_or_default();
-            format!("OMNAFK - ACTIVE - NEXT TICK {:02}:{:02}", next / 60, next % 60)
+            format!(
+                "OMNAFK - ACTIVE - NEXT TICK {:02}:{:02}",
+                next / 60,
+                next % 60
+            )
         }
     }
 }
@@ -123,7 +132,9 @@ fn icon_for(state: EngineStatus, blink_on: bool) -> tauri::Result<Image<'static>
         EngineStatus::Holding if blink_on => {
             Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))
         }
-        EngineStatus::Suspended => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
+        EngineStatus::Suspended => {
+            Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png"))
+        }
         _ => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
     }
 }

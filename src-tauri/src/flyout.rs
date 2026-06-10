@@ -1,5 +1,7 @@
 use crate::{config, engine::SharedEngine};
-use tauri::{AppHandle, Manager, PhysicalPosition, Position, Rect, Size, WebviewWindow, WindowEvent};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, Position, Rect, Size, WebviewWindow, WindowEvent,
+};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const GAP: f64 = 12.0;
@@ -57,16 +59,18 @@ pub fn open_default(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn register_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
-    app.global_shortcut()
-        .unregister_all()
-        .map_err(|error| format!("Couldn't update the hotkey - restart OMNAFK to fix this: {error}"))?;
+    app.global_shortcut().unregister_all().map_err(|error| {
+        format!("Couldn't update the hotkey - restart OMNAFK to fix this: {error}")
+    })?;
     app.global_shortcut()
         .on_shortcut(hotkey, |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
                 let _ = open_default(app);
             }
         })
-        .map_err(|error| format!("Couldn't register the hotkey - choose another shortcut to fix this: {error}"))
+        .map_err(|error| {
+            format!("Couldn't register the hotkey - choose another shortcut to fix this: {error}")
+        })
 }
 
 fn show_window(window: &WebviewWindow) -> tauri::Result<()> {
@@ -76,8 +80,13 @@ fn show_window(window: &WebviewWindow) -> tauri::Result<()> {
 
 fn position_near_tray(app: &AppHandle, window: &WebviewWindow, rect: Rect) -> tauri::Result<()> {
     let size = window.outer_size()?;
-    let work = work_area_for_rect(app, &rect)
-        .or_else(|| window.current_monitor().ok().flatten().map(|monitor| *monitor.work_area()));
+    let work = work_area_for_rect(app, &rect).or_else(|| {
+        window
+            .current_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| *monitor.work_area())
+    });
     let Some(work) = work else {
         return Ok(());
     };
@@ -119,10 +128,7 @@ fn position_near_tray(app: &AppHandle, window: &WebviewWindow, rect: Rect) -> ta
     window.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
 }
 
-fn work_area_for_rect(
-    app: &AppHandle,
-    rect: &Rect,
-) -> Option<tauri::PhysicalRect<i32, u32>> {
+fn work_area_for_rect(app: &AppHandle, rect: &Rect) -> Option<tauri::PhysicalRect<i32, u32>> {
     let (x, y, width, height) = rect_parts(rect);
     let center_x = x + width / 2.0;
     let center_y = y + height / 2.0;

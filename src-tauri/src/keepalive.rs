@@ -1,4 +1,4 @@
-use crate::config::{AppConfig, KeepaliveAction};
+use crate::config::{key_name_to_vk, AppConfig, ResolvedAction};
 use rand::Rng;
 use std::{
     ffi::c_void,
@@ -14,7 +14,7 @@ use windows::Win32::{
         Input::KeyboardAndMouse::{
             GetLastInputInfo, MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD,
             INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, LASTINPUTINFO,
-            MAPVK_VK_TO_VSC, MOUSEINPUT, MOUSEEVENTF_MOVE, VIRTUAL_KEY,
+            MAPVK_VK_TO_VSC, MOUSEEVENTF_MOVE, MOUSEINPUT, VIRTUAL_KEY,
         },
         WindowsAndMessaging::{
             GetForegroundWindow, PostMessageW, SetForegroundWindow, WM_KEYDOWN, WM_KEYUP,
@@ -31,20 +31,25 @@ const KEY_W: u16 = 0x57;
 pub struct KeepaliveOptions {
     pub interval: u64,
     pub randomize: bool,
-    pub action: KeepaliveAction,
+    pub action: ResolvedAction,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
 }
 
-impl From<&AppConfig> for KeepaliveOptions {
-    fn from(config: &AppConfig) -> Self {
+impl KeepaliveOptions {
+    pub fn from_config(config: &AppConfig, exe: &str, wclass: &str) -> Self {
+        let resolved = config.resolve_keepalive(exe, wclass);
         Self {
-            interval: config.interval,
+            interval: resolved.interval,
             randomize: config.randomize,
-            action: config.action,
+            action: resolved.action,
             send_without_focus: config.send_without_focus,
             hold_while_playing: config.hold_while_playing,
         }
+    }
+
+    pub fn global_from_config(config: &AppConfig) -> Self {
+        Self::from_config(config, "", "")
     }
 }
 
@@ -52,6 +57,7 @@ impl From<&AppConfig> for KeepaliveOptions {
 pub struct KeepaliveTarget {
     pub hwnd: isize,
     pub exe: String,
+    pub wclass: String,
 }
 
 #[derive(Debug, Clone)]
@@ -162,11 +168,14 @@ pub fn next_delay(interval_secs: u64, randomize: bool, rng: &mut impl Rng) -> Du
     Duration::from_secs(jittered)
 }
 
-pub fn send_keepalive(target: &KeepaliveTarget, options: &KeepaliveOptions) -> Result<(), KeepaliveError> {
+pub fn send_keepalive(
+    target: &KeepaliveTarget,
+    options: &KeepaliveOptions,
+) -> Result<(), KeepaliveError> {
     if options.send_without_focus {
-        post_action(target, options.action)
+        post_action(target, &options.action)
     } else {
-        focus_flick_action(target, options.action)
+        focus_flick_action(target, &options.action)
     }
 }
 
@@ -193,20 +202,35 @@ impl fmt::Display for KeepaliveError {
 
 impl std::error::Error for KeepaliveError {}
 
-fn post_action(target: &KeepaliveTarget, action: KeepaliveAction) -> Result<(), KeepaliveError> {
+fn post_action(target: &KeepaliveTarget, action: &ResolvedAction) -> Result<(), KeepaliveError> {
     let hwnd = hwnd_from_isize(target.hwnd);
     match action {
-        KeepaliveAction::SpaceTap => post_key_tap(hwnd, KEY_SPACE, &target.exe),
-        KeepaliveAction::WTap => post_key_tap(hwnd, KEY_W, &target.exe),
-        KeepaliveAction::CameraNudge => {
+        ResolvedAction::SpaceTap => post_key_tap(hwnd, KEY_SPACE, &target.exe),
+        ResolvedAction::WTap => post_key_tap(hwnd, KEY_W, &target.exe),
+        ResolvedAction::CameraNudge => {
             post_mouse_move(hwnd, 2, 0, &target.exe)?;
             thread::sleep(Duration::from_millis(25));
             post_mouse_move(hwnd, -2, 0, &target.exe)
         }
+        ResolvedAction::KeySequence(keys) => {
+            for key in keys {
+                let vk = key_name_to_vk(key).ok_or_else(|| KeepaliveError {
+                    message: format!(
+                        "Couldn't send key sequence - record supported keys in Settings to fix this: unsupported key '{key}'."
+                    ),
+                })?;
+                post_key_tap(hwnd, vk, &target.exe)?;
+                thread::sleep(Duration::from_millis(40));
+            }
+            Ok(())
+        }
     }
 }
 
-fn focus_flick_action(target: &KeepaliveTarget, action: KeepaliveAction) -> Result<(), KeepaliveError> {
+fn focus_flick_action(
+    target: &KeepaliveTarget,
+    action: &ResolvedAction,
+) -> Result<(), KeepaliveError> {
     let target_hwnd = hwnd_from_isize(target.hwnd);
     let previous = unsafe { GetForegroundWindow() };
 
@@ -260,12 +284,23 @@ fn post_mouse_move(hwnd: HWND, x: i16, y: i16, exe: &str) -> Result<(), Keepaliv
     }
 }
 
-fn send_input_action(action: KeepaliveAction, exe: &str) -> Result<(), KeepaliveError> {
+fn send_input_action(action: &ResolvedAction, exe: &str) -> Result<(), KeepaliveError> {
     let inputs = match action {
-        KeepaliveAction::SpaceTap => key_inputs(KEY_SPACE),
-        KeepaliveAction::WTap => key_inputs(KEY_W),
-        KeepaliveAction::CameraNudge => vec![mouse_input(2, 0), mouse_input(-2, 0)],
+        ResolvedAction::SpaceTap => key_inputs(KEY_SPACE),
+        ResolvedAction::WTap => key_inputs(KEY_W),
+        ResolvedAction::CameraNudge => vec![mouse_input(2, 0), mouse_input(-2, 0)],
+        ResolvedAction::KeySequence(keys) => keys
+            .iter()
+            .flat_map(|key| key_name_to_vk(key).map(key_inputs).unwrap_or_default())
+            .collect(),
     };
+
+    if inputs.is_empty() {
+        return Err(KeepaliveError {
+            message: "Couldn't send key sequence - record supported keys in Settings to fix this."
+                .to_string(),
+        });
+    }
 
     let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
     if sent == inputs.len() as u32 {
@@ -276,7 +311,10 @@ fn send_input_action(action: KeepaliveAction, exe: &str) -> Result<(), Keepalive
 }
 
 fn key_inputs(vk: u16) -> Vec<INPUT> {
-    vec![key_input(vk, KEYBD_EVENT_FLAGS(0)), key_input(vk, KEYEVENTF_KEYUP)]
+    vec![
+        key_input(vk, KEYBD_EVENT_FLAGS(0)),
+        key_input(vk, KEYEVENTF_KEYUP),
+    ]
 }
 
 fn key_input(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
@@ -358,7 +396,7 @@ mod tests {
         KeepaliveOptions {
             interval: 540,
             randomize: true,
-            action: KeepaliveAction::SpaceTap,
+            action: ResolvedAction::SpaceTap,
             send_without_focus: true,
             hold_while_playing: true,
         }
@@ -368,6 +406,7 @@ mod tests {
         KeepaliveTarget {
             hwnd: 77,
             exe: "game.exe".to_string(),
+            wclass: "CLASS".to_string(),
         }
     }
 
