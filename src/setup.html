@@ -115,7 +115,7 @@ const T=window.__TAURI__;
 const inv=(cmd,args)=>T?T.core.invoke(cmd,args):Promise.resolve(null);
 const $=id=>document.getElementById(id);
 const steps=[...document.querySelectorAll('.step')],pages=[...document.querySelectorAll('.page')];
-let state={mode:'install',version:'0.1.1',install_dir:'',payload_size:'payload',payload_embedded:false};
+let state={mode:'install',version:'0.1.2',install_dir:'',payload_size:'payload',payload_embedded:false};
 let cur=0, busy=false, finished=false, failed=false, confirming=false, savedFooter=null;
 let progressReady=Promise.resolve(), pollTimer=null, watchdogTimer=null, lastProgressAt=0, lastProgressKey='';
 
@@ -273,7 +273,7 @@ if(T){
   progressReady=T.event.listen('setup://progress',e=>handleProgress(e.payload)).catch(()=>null);
   inv('setup_state').then(s=>{state=s;applyMode()}).catch(showError);
 }else{
-  state={mode:'install',version:'0.1.1',install_dir:'%LOCALAPPDATA%\\OMNAFK',payload_size:'~24.1 MB on disk',payload_embedded:true};
+  state={mode:'install',version:'0.1.2',install_dir:'%LOCALAPPDATA%\\OMNAFK',payload_size:'~24.1 MB on disk',payload_embedded:true};
   applyMode();
 }
 </script>

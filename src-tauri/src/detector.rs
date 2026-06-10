@@ -107,7 +107,7 @@ pub fn score(facts: &WindowFacts) -> i32 {
         score += 35;
     }
     if facts.platform_path {
-        score += 30;
+        score += 55;
     }
     if facts.known_game {
         score += 55;
@@ -394,12 +394,17 @@ fn is_game_platform_path(path: &str) -> bool {
     [
         r"\steamapps\common\",
         r"\epic games\",
+        r"\gog games\",
         r"\riot games\",
         r"\xboxgames\",
         r"\windowsapps\",
         r"\roblox\",
         r"\battle.net\",
+        r"\ea games\",
         r"\gog galaxy\",
+        r"\ubisoft game launcher\games\",
+        r"\ubisoft connect\games\",
+        r"\itch\apps\",
     ]
     .iter()
     .any(|needle| path.contains(needle))
@@ -501,14 +506,30 @@ mod tests {
     }
 
     #[test]
-    fn steam_path_windowed_depends_on_sensitivity() {
+    fn platform_path_windowed_scores_game_at_standard() {
         let facts = WindowFacts {
             platform_path: true,
             ..facts()
         };
 
-        assert_eq!(score(&facts), 30);
-        assert_eq!(verdict(&facts, Sensitivity::Broad), Verdict::Game);
+        assert_eq!(score(&facts), 55);
+        assert_eq!(verdict(&facts, Sensitivity::Standard), Verdict::Game);
+        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Ignored);
+    }
+
+    #[test]
+    fn negative_class_still_beats_platform_path() {
+        let facts = WindowFacts {
+            title: "Settings".to_string(),
+            exe: "SystemSettings.exe".to_string(),
+            wclass: "ApplicationFrameWindow".to_string(),
+            platform_path: true,
+            negative_class: true,
+            ..facts()
+        };
+
+        assert_eq!(score(&facts), -5);
+        assert_eq!(verdict(&facts, Sensitivity::Broad), Verdict::Ignored);
         assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Ignored);
     }
 
@@ -538,7 +559,7 @@ mod tests {
             ..facts()
         };
 
-        assert_eq!(score(&facts), 85);
+        assert_eq!(score(&facts), 110);
         assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Game);
     }
 
