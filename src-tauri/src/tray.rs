@@ -126,10 +126,9 @@ fn tooltip_for(state: EngineStatus, next_tick: Option<u64>) -> String {
     }
 }
 
-fn icon_for(state: EngineStatus, blink_on: bool) -> tauri::Result<Image<'static>> {
+fn icon_for(state: EngineStatus, _blink_on: bool) -> tauri::Result<Image<'static>> {
     match state {
-        EngineStatus::Active => Image::from_bytes(include_bytes!("../icons/sentinel-active.png")),
-        EngineStatus::Holding if blink_on => {
+        EngineStatus::Active | EngineStatus::Holding => {
             Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))
         }
         EngineStatus::Suspended => {

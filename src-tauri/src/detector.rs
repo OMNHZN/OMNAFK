@@ -110,7 +110,7 @@ pub fn score(facts: &WindowFacts) -> i32 {
         score += 55;
     }
     if facts.known_game {
-        score += 55;
+        score += 80;
     }
     if facts.negative_class {
         score -= 60;
@@ -166,11 +166,11 @@ unsafe fn is_candidate_window(hwnd: HWND) -> bool {
         return false;
     }
 
-    GetWindowTextLengthW(hwnd) > 0
+    true
 }
 
 fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWindowSeed> {
-    let title = window_text(hwnd)?;
+    let raw_title = window_text(hwnd);
     let wclass = window_class(hwnd)?;
     let pid = window_pid(hwnd)?;
     let path = process_path(pid);
@@ -179,13 +179,23 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
         .and_then(|path| Path::new(path).file_name())
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| format!("pid-{pid}"));
-    let modules = process_modules(pid);
-    let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
     let platform_path = path.as_deref().map(is_game_platform_path).unwrap_or(false);
     let (fullscreen, borderless) = window_screen_coverage(hwnd).unwrap_or((false, false));
-    let known_game = is_known_game_window(&title, &exe, &wclass, path.as_deref());
+    let known_game = is_known_game_window(&raw_title, &exe, &wclass, path.as_deref());
+
+    if raw_title.is_empty() && !platform_path && !known_game {
+        return None;
+    }
+
+    let modules = process_modules(pid);
+    let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
     let negative_class = !known_game && is_negative_window(&exe, &wclass);
     let _gpu_usage = gpu.usage_for_pid(pid);
+    let title = if raw_title.is_empty() {
+        fallback_title(&exe, path.as_deref())
+    } else {
+        raw_title
+    };
 
     Some(DetectedWindowSeed {
         hwnd: hwnd.0 as isize,
@@ -210,24 +220,28 @@ struct DetectedWindowSeed {
     facts: WindowFacts,
 }
 
-fn window_text(hwnd: HWND) -> Option<String> {
+fn window_text(hwnd: HWND) -> String {
     let len = unsafe { GetWindowTextLengthW(hwnd) };
     if len <= 0 {
-        return None;
+        return String::new();
     }
 
     let mut buf = vec![0; len as usize + 1];
     let read = unsafe { GetWindowTextW(hwnd, &mut buf) };
     if read <= 0 {
-        return None;
+        return String::new();
     }
 
-    Some(
-        String::from_utf16_lossy(&buf[..read as usize])
-            .trim()
-            .to_string(),
-    )
-    .filter(|title| !title.is_empty())
+    String::from_utf16_lossy(&buf[..read as usize])
+        .trim()
+        .to_string()
+}
+
+fn fallback_title(exe: &str, path: Option<&str>) -> String {
+    path.and_then(|path| Path::new(path).file_stem())
+        .map(|name| name.to_string_lossy().to_string())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| exe.to_string())
 }
 
 fn window_class(hwnd: HWND) -> Option<String> {
@@ -249,14 +263,7 @@ fn window_pid(hwnd: HWND) -> Option<u32> {
 }
 
 fn process_path(pid: u32) -> Option<String> {
-    let handle = unsafe {
-        OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
-            false,
-            pid,
-        )
-        .ok()?
-    };
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()? };
     let mut buf = vec![0; 32_768];
     let mut len = buf.len() as u32;
     let result = unsafe {
@@ -399,6 +406,7 @@ fn is_game_platform_path(path: &str) -> bool {
         r"\xboxgames\",
         r"\windowsapps\",
         r"\roblox\",
+        r"\bloxstrap\",
         r"\battle.net\",
         r"\ea games\",
         r"\gog galaxy\",
@@ -416,15 +424,21 @@ fn is_known_game_window(title: &str, exe: &str, wclass: &str, path: Option<&str>
     let wclass = wclass.to_ascii_lowercase();
     let path = path.unwrap_or_default().to_ascii_lowercase();
 
-    if exe == "robloxplayerbeta.exe" {
+    if exe == "robloxplayerbeta.exe" || exe == "robloxplayer.exe" {
         return true;
     }
 
-    if exe == "windows10universal.exe" && (title.contains("roblox") || path.contains("roblox")) {
+    if exe == "windows10universal.exe"
+        && (title.contains("roblox") || path.contains("roblox") || wclass.contains("roblox"))
+    {
         return true;
     }
 
-    wclass == "windowsclient" && title.contains("roblox")
+    path.contains(r"\roblox\")
+        || path.contains(r"\bloxstrap\")
+        || (wclass == "windowsclient"
+            && (title.contains("roblox") || exe.contains("roblox") || path.contains("roblox")))
+        || wclass.contains("roblox")
 }
 
 fn is_negative_window(exe: &str, wclass: &str) -> bool {
@@ -534,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn known_roblox_player_scores_game_at_standard() {
+    fn known_roblox_player_scores_game_at_strict() {
         let facts = WindowFacts {
             title: "Roblox".to_string(),
             exe: "RobloxPlayerBeta.exe".to_string(),
@@ -543,9 +557,29 @@ mod tests {
             ..facts()
         };
 
-        assert_eq!(score(&facts), 55);
+        assert_eq!(score(&facts), 80);
         assert_eq!(verdict(&facts, Sensitivity::Standard), Verdict::Game);
-        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Ignored);
+        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Game);
+    }
+
+    #[test]
+    fn titleless_roblox_player_still_scores_game() {
+        let facts = WindowFacts {
+            title: "RobloxPlayerBeta".to_string(),
+            exe: "RobloxPlayerBeta.exe".to_string(),
+            wclass: "WINDOWSCLIENT".to_string(),
+            known_game: true,
+            ..facts()
+        };
+
+        assert!(is_known_game_window(
+            "",
+            "RobloxPlayerBeta.exe",
+            "WINDOWSCLIENT",
+            None
+        ));
+        assert_eq!(score(&facts), 80);
+        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Game);
     }
 
     #[test]
@@ -559,8 +593,23 @@ mod tests {
             ..facts()
         };
 
-        assert_eq!(score(&facts), 110);
+        assert_eq!(score(&facts), 135);
         assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Game);
+    }
+
+    #[test]
+    fn recognizes_bloxstrap_roblox_paths() {
+        assert!(is_game_platform_path(
+            r"C:\Users\Player\AppData\Local\Bloxstrap\Versions\version-abc\RobloxPlayerBeta.exe"
+        ));
+        assert!(is_known_game_window(
+            "",
+            "RobloxPlayerBeta.exe",
+            "WINDOWSCLIENT",
+            Some(
+                r"C:\Users\Player\AppData\Local\Bloxstrap\Versions\version-abc\RobloxPlayerBeta.exe"
+            )
+        ));
     }
 
     #[test]
