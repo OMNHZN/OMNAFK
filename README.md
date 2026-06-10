@@ -1,12 +1,9 @@
-<p align="center">
-  <img src="assets/github/logo.png" width="104" alt="OMNAFK logo">
+<p>
+  <img src="assets/github/readme-hero.png" alt="OMNAFK - Awake when you aren't" width="100%">
 </p>
 
-<h1 align="center">OMNAFK</h1>
-
 <p align="center">
-  <strong>Awake when you aren't.</strong><br>
-  A tray-first Windows utility that detects games automatically and sends quiet keepalive input when they need it.
+  <strong>Tray-first Windows keepalive for games.</strong>
 </p>
 
 <p align="center">
@@ -30,6 +27,31 @@
   </a>
 </p>
 
+## What It Does
+
+OMNAFK watches your visible windows, decides which ones look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. It runs from the tray, wakes when a game does, and goes dormant when there is nothing to do.
+
+## Highlights
+
+- Detects fullscreen, borderless, and game-platform windows automatically.
+- Sends background keepalive input by default, avoiding focus theft.
+- Skips ticks while you are actively playing.
+- Saves settings and target overrides immediately.
+- Checks GitHub Releases and opens structured bug reports from Settings.
+
+## Install
+
+Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/OMNAFK/releases/latest), run it, and leave **Start with Windows** enabled if you want OMNAFK to live quietly in the tray.
+
+## Updates And Feedback
+
+The app is wired to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check GitHub Releases, open the latest download, open the repository, and start a structured bug report.
+
+Publishing a new version tag, such as `v0.1.1`, builds and attaches the custom setup executable to GitHub Releases.
+
+<details>
+<summary>Screenshots</summary>
+
 <table>
   <tr>
     <td width="50%">
@@ -45,30 +67,7 @@
   </tr>
 </table>
 
-## Why OMNAFK
-
-OMNAFK watches your visible windows, decides which ones look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. It runs from the tray, wakes when a game does, and goes dormant when there is nothing to do.
-
-## What You Get
-
-| Feature | Behavior |
-| --- | --- |
-| Automatic detection | Finds fullscreen, borderless, and game-platform windows without manual arming. |
-| Quiet keepalives | Uses `PostMessage` by default so it avoids stealing focus. |
-| Play-aware timing | Skips ticks while you are actively playing. |
-| Persistent overrides | Marks any detected target as `GAME` or `IGNORED` and remembers it. |
-| Save-on-change settings | Writes settings immediately to `%APPDATA%\OMNAFK\config.json`. |
-| GitHub updates | Checks GitHub Releases and opens the bug-report form from Settings. |
-
-## Install
-
-Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/OMNAFK/releases/latest), run it, and leave **Start with Windows** enabled if you want OMNAFK to live quietly in the tray.
-
-## Updates And Feedback
-
-The app is wired to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check GitHub Releases, open the latest download, open the repository, and start a structured bug report.
-
-Publishing a new version tag, such as `v0.1.1`, builds and attaches the custom setup executable to GitHub Releases.
+</details>
 
 <details>
 <summary>Build from source</summary>

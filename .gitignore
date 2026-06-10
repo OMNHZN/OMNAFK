@@ -4,6 +4,3 @@ node_modules/
 dist/
 *.log
 .DS_Store
-.cursorrules
-AGENTS.md
-CODEX_ONE_SHOT.md
