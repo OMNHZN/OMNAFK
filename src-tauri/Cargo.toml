@@ -1,0 +1,58 @@
+[package]
+name = "omnafk"
+version = "0.1.0"
+description = "Tray-first anti-AFK utility for Windows."
+authors = ["OMNAFK"]
+edition = "2021"
+default-run = "omnafk"
+
+[lib]
+name = "omnafk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omnafk"
+path = "src/main.rs"
+
+[[bin]]
+name = "omnafk-engine"
+path = "src/bin/omnafk-engine.rs"
+
+[[bin]]
+name = "omnafk-setup"
+path = "src/bin/omnafk-setup.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+dirs = "6"
+parking_lot = "0.12"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+winreg = "0.55"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Performance",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Registry",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging"
+] }

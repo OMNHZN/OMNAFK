@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Build custom OMNAFK setup
+        shell: pwsh
+        run: ./scripts/build-custom-installer.ps1
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OMNAFK ${{ github.ref_name }}
+          files: dist/OMNAFK-Setup.exe
+          prerelease: ${{ contains(github.ref_name, '-') }}

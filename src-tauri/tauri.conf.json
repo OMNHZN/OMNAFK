@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OMNAFK",
+  "version": "0.1.0",
+  "identifier": "io.omnafk.app",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "flyout",
+        "title": "OMNAFK",
+        "width": 380,
+        "height": 560,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "sidebarImage": "windows/installer-sidebar.bmp",
+        "headerImage": "windows/installer-header.bmp",
+        "uninstallerHeaderImage": "windows/uninstaller-header.bmp",
+        "startMenuFolder": "OMNAFK",
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+name: Bug report
+description: Report something broken in OMNAFK
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Details make OMNAFK much easier to fix.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Tell us what went wrong and what you expected instead.
+      placeholder: OMNAFK did...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the shortest steps that make the bug happen again.
+      placeholder: |
+        1. Open OMNAFK
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OMNAFK version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or logs
+      description: Attach screenshots, installer logs, or anything else that shows the issue.
+    validations:
+      required: false
