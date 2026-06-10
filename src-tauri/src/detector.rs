@@ -5,14 +5,14 @@ use std::{
     path::Path,
 };
 use windows::{
-    core::{PWSTR, BOOL},
+    core::{BOOL, PWSTR},
     Win32::{
         Foundation::{CloseHandle, HWND, LPARAM, RECT},
-        Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
+        Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        },
         System::{
-            ProcessStatus::{
-                K32EnumProcessModulesEx, K32GetModuleBaseNameW, LIST_MODULES_ALL,
-            },
+            ProcessStatus::{K32EnumProcessModulesEx, K32GetModuleBaseNameW, LIST_MODULES_ALL},
             Threading::{
                 OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
                 PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
@@ -36,6 +36,7 @@ pub struct WindowFacts {
     pub borderless: bool,
     pub gfx_dll: bool,
     pub platform_path: bool,
+    pub known_game: bool,
     pub negative_class: bool,
 }
 
@@ -71,7 +72,10 @@ impl GpuUsageProbe for NoGpuUsageProbe {
 pub fn scan_windows(sensitivity: Sensitivity, gpu: &dyn GpuUsageProbe) -> Vec<DetectedWindow> {
     let mut hwnds = Vec::new();
     unsafe {
-        let _ = EnumWindows(Some(enum_window), LPARAM((&mut hwnds as *mut Vec<HWND>) as isize));
+        let _ = EnumWindows(
+            Some(enum_window),
+            LPARAM((&mut hwnds as *mut Vec<HWND>) as isize),
+        );
     }
 
     hwnds
@@ -104,6 +108,9 @@ pub fn score(facts: &WindowFacts) -> i32 {
     }
     if facts.platform_path {
         score += 30;
+    }
+    if facts.known_game {
+        score += 55;
     }
     if facts.negative_class {
         score -= 60;
@@ -174,12 +181,10 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
         .unwrap_or_else(|| format!("pid-{pid}"));
     let modules = process_modules(pid);
     let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
-    let platform_path = path
-        .as_deref()
-        .map(is_game_platform_path)
-        .unwrap_or(false);
+    let platform_path = path.as_deref().map(is_game_platform_path).unwrap_or(false);
     let (fullscreen, borderless) = window_screen_coverage(hwnd).unwrap_or((false, false));
-    let negative_class = is_negative_window(&exe, &wclass);
+    let known_game = is_known_game_window(&title, &exe, &wclass, path.as_deref());
+    let negative_class = !known_game && is_negative_window(&exe, &wclass);
     let _gpu_usage = gpu.usage_for_pid(pid);
 
     Some(DetectedWindowSeed {
@@ -193,6 +198,7 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
             borderless,
             gfx_dll,
             platform_path,
+            known_game,
             negative_class,
         },
     })
@@ -216,8 +222,12 @@ fn window_text(hwnd: HWND) -> Option<String> {
         return None;
     }
 
-    Some(String::from_utf16_lossy(&buf[..read as usize]).trim().to_string())
-        .filter(|title| !title.is_empty())
+    Some(
+        String::from_utf16_lossy(&buf[..read as usize])
+            .trim()
+            .to_string(),
+    )
+    .filter(|title| !title.is_empty())
 }
 
 fn window_class(hwnd: HWND) -> Option<String> {
@@ -320,7 +330,10 @@ fn process_modules(pid: u32) -> Vec<String> {
     names
 }
 
-fn module_name(handle: windows::Win32::Foundation::HANDLE, module: windows::Win32::Foundation::HMODULE) -> Option<String> {
+fn module_name(
+    handle: windows::Win32::Foundation::HANDLE,
+    module: windows::Win32::Foundation::HMODULE,
+) -> Option<String> {
     let mut buf = vec![0; 260];
     let read = unsafe { K32GetModuleBaseNameW(handle, Some(module), &mut buf) };
     if read == 0 {
@@ -392,6 +405,23 @@ fn is_game_platform_path(path: &str) -> bool {
     .any(|needle| path.contains(needle))
 }
 
+fn is_known_game_window(title: &str, exe: &str, wclass: &str, path: Option<&str>) -> bool {
+    let title = title.to_ascii_lowercase();
+    let exe = exe.to_ascii_lowercase();
+    let wclass = wclass.to_ascii_lowercase();
+    let path = path.unwrap_or_default().to_ascii_lowercase();
+
+    if exe == "robloxplayerbeta.exe" {
+        return true;
+    }
+
+    if exe == "windows10universal.exe" && (title.contains("roblox") || path.contains("roblox")) {
+        return true;
+    }
+
+    wclass == "windowsclient" && title.contains("roblox")
+}
+
 fn is_negative_window(exe: &str, wclass: &str) -> bool {
     let exe = exe.to_ascii_lowercase();
     let wclass = wclass.to_ascii_lowercase();
@@ -422,9 +452,7 @@ fn is_negative_window(exe: &str, wclass: &str) -> bool {
     ];
 
     negative_exe.iter().any(|name| exe == *name)
-        || negative_class
-            .iter()
-            .any(|needle| wclass.contains(needle))
+        || negative_class.iter().any(|needle| wclass.contains(needle))
 }
 
 #[cfg(test)]
@@ -441,6 +469,7 @@ mod tests {
             borderless: false,
             gfx_dll: false,
             platform_path: false,
+            known_game: false,
             negative_class: false,
         }
     }
@@ -481,5 +510,59 @@ mod tests {
         assert_eq!(score(&facts), 30);
         assert_eq!(verdict(&facts, Sensitivity::Broad), Verdict::Game);
         assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Ignored);
+    }
+
+    #[test]
+    fn known_roblox_player_scores_game_at_standard() {
+        let facts = WindowFacts {
+            title: "Roblox".to_string(),
+            exe: "RobloxPlayerBeta.exe".to_string(),
+            wclass: "WINDOWSCLIENT".to_string(),
+            known_game: true,
+            ..facts()
+        };
+
+        assert_eq!(score(&facts), 55);
+        assert_eq!(verdict(&facts, Sensitivity::Standard), Verdict::Game);
+        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Ignored);
+    }
+
+    #[test]
+    fn known_roblox_path_scores_game_at_strict() {
+        let facts = WindowFacts {
+            title: "Roblox".to_string(),
+            exe: "RobloxPlayerBeta.exe".to_string(),
+            wclass: "WINDOWSCLIENT".to_string(),
+            platform_path: true,
+            known_game: true,
+            ..facts()
+        };
+
+        assert_eq!(score(&facts), 85);
+        assert_eq!(verdict(&facts, Sensitivity::Strict), Verdict::Game);
+    }
+
+    #[test]
+    fn recognizes_roblox_store_wrapper_without_negative_class() {
+        assert!(is_known_game_window(
+            "Roblox",
+            "Windows10Universal.exe",
+            "ApplicationFrameWindow",
+            Some(r"C:\Program Files\WindowsApps\ROBLOXCORPORATION.ROBLOX")
+        ));
+    }
+
+    #[test]
+    fn generic_application_frame_remains_negative() {
+        assert!(!is_known_game_window(
+            "Settings",
+            "SystemSettings.exe",
+            "ApplicationFrameWindow",
+            None
+        ));
+        assert!(is_negative_window(
+            "SystemSettings.exe",
+            "ApplicationFrameWindow"
+        ));
     }
 }
