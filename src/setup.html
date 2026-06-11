@@ -81,7 +81,7 @@
       <div class="page welcome active" data-i="0">
         <img class="mark" src="assets/sentinel-dormant.png" alt="">
         <div class="wname">OMNAFK</div>
-        <div class="wtag" id="wtag">Quiet watch for game windows.</div>
+        <div class="wtag" id="wtag">Awake when you aren't.</div>
         <div class="wmeta" id="meta">V0.1.2 · PAYLOAD · MIT LICENSE</div>
       </div>
       <div class="page" data-i="1" id="optionsPage">
@@ -136,7 +136,7 @@ function applyMode(){
   setOn($('startTgl'),state.start_with_windows!==false);
   setOn($('desktopTgl'),!!state.desktop_shortcut);
   $('headVersion').textContent='v'+state.version;
-  $('wtag').textContent=update?'Update ready.':'Quiet watch for game windows.';
+  $('wtag').textContent=update?'Update ready.':'Awake when you aren\'t.';
   $('meta').textContent=(update&&state.installed_version?'V'+state.installed_version+' -> V'+state.version:'V'+state.version)+' · '+state.payload_size+' · MIT LICENSE';
   $('doneTitle').textContent=uninstall?'REMOVED':update?'UPDATED':'INSTALLED';
   $('doneFine').textContent=uninstall?'OMNAFK has been removed from this user account.':'OMNAFK is in your tray. It wakes when a game does.';
