@@ -109,6 +109,20 @@
   .feature { background: var(--surface); padding: 24px; min-height: 158px; }
   .feature h3 { margin: 0 0 12px; font: 700 13px var(--mono); letter-spacing: 0; }
   .feature p { margin: 0; color: var(--dim); line-height: 1.55; font-size: 14px; }
+  .intro { max-width: 680px; color: var(--dim); font-size: 16px; line-height: 1.7; margin: -10px 0 28px; }
+  .app-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .shot { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; overflow: hidden; }
+  .shot img { display: block; width: 100%; height: auto; background: #000; border-bottom: 1px solid var(--line); }
+  .shot h3 { margin: 0; padding: 16px 18px 6px; font: 700 13px var(--mono); letter-spacing: 0; }
+  .shot p { margin: 0; padding: 0 18px 18px; color: var(--dim); line-height: 1.55; font-size: 14px; }
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); background: var(--line); gap: 1px; }
+  .flow-step { background: var(--surface); min-height: 142px; padding: 22px; }
+  .flow-step b { display: block; margin-bottom: 16px; color: var(--faint); font: 700 11px var(--mono); }
+  .flow-step h3 { margin: 0 0 10px; font: 700 13px var(--mono); }
+  .flow-step p { margin: 0; color: var(--dim); font-size: 14px; line-height: 1.55; }
+  .control-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .control-list div { background: var(--surface); padding: 18px 20px; color: var(--dim); line-height: 1.55; font-size: 14px; }
+  .control-list b { display: block; color: var(--text); font: 700 12px var(--mono); margin-bottom: 6px; }
   .showcase { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 40px; align-items: center; }
   .showcase img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #000; }
   .steps { display: grid; gap: 14px; color: var(--dim); line-height: 1.7; max-width: 500px; }
@@ -123,7 +137,7 @@
         #000;
     }
     .hero-copy { padding-top: 430px; padding-bottom: 62px; }
-    .features, .showcase, .quick { grid-template-columns: 1fr; }
+    .features, .showcase, .quick, .app-grid, .flow, .control-list { grid-template-columns: 1fr; }
     .quick a, .quick span { border-right: 0; border-bottom: 1px solid var(--line); justify-content: flex-start; }
     .quick :last-child { border-bottom: 0; }
     .nav-links { gap: 12px; font-size: 11px; }
@@ -143,6 +157,7 @@
       <span>OMNAFK</span>
       <div class="nav-links">
         <a href="#install">Install</a>
+        <a href="#app">App</a>
         <a href="#behavior">Behavior</a>
         <a href="https://github.com/OMNHZN/OMNAFK">GitHub</a>
       </div>
@@ -181,6 +196,78 @@
           <h3>MARKED BY YOU</h3>
           <p>Every seen target can be corrected as marked or ignored, and those choices persist across restarts.</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="app">
+    <div class="wrap">
+      <p class="eyebrow">INSIDE THE APP</p>
+      <h2>Small window. Full control.</h2>
+      <p class="intro">OMNAFK lives in the tray, but the flyout gives you the controls that matter: timing, targets, updates, and diagnostics.</p>
+      <div class="app-grid">
+        <article class="shot">
+          <img src="assets/app-general.png" alt="OMNAFK General tab">
+          <h3>GENERAL</h3>
+          <p>Set the keepalive interval, action, random timing, and play-aware pause behavior from the first tab.</p>
+        </article>
+        <article class="shot">
+          <img src="assets/app-sightline.png" alt="OMNAFK Sightline tab">
+          <h3>SIGHTLINE</h3>
+          <p>See what OMNAFK sees, mark a target, ignore a window, pause a target, or send a test action.</p>
+        </article>
+        <article class="shot">
+          <img src="assets/app-settings.png" alt="OMNAFK Settings tab">
+          <h3>SETTINGS</h3>
+          <p>Control launch behavior, notifications, detection sensitivity, update checks, and import/export.</p>
+        </article>
+        <article class="shot">
+          <img src="assets/app-about.png" alt="OMNAFK About tab">
+          <h3>ABOUT</h3>
+          <p>Check for updates, open the repository, report a bug, copy diagnostics, and review license details.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="workflow">
+    <div class="wrap">
+      <p class="eyebrow">FLOW</p>
+      <h2>What happens while it runs.</h2>
+      <div class="flow">
+        <article class="flow-step">
+          <b>01</b>
+          <h3>WATCH</h3>
+          <p>Sightline checks visible windows and scores likely games.</p>
+        </article>
+        <article class="flow-step">
+          <b>02</b>
+          <h3>MARK</h3>
+          <p>You can accept the automatic mark, ignore it, or pin your own choice.</p>
+        </article>
+        <article class="flow-step">
+          <b>03</b>
+          <h3>KEEP ALIVE</h3>
+          <p>OMNAFK sends the selected quiet action on its timer.</p>
+        </article>
+        <article class="flow-step">
+          <b>04</b>
+          <h3>RETURN</h3>
+          <p>When nothing needs attention, it drops back to dormant.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="control">
+    <div class="wrap">
+      <p class="eyebrow">CONTROL</p>
+      <h2>Preferences stay yours.</h2>
+      <div class="control-list">
+        <div><b>Target profiles</b>Choose a different action or interval for a specific marked window.</div>
+        <div><b>Safety pauses</b>Hold while you are actively playing, pause on battery, or use quiet hours.</div>
+        <div><b>Stable updates</b>Check GitHub Releases from Settings and ignore an update when you want to wait.</div>
+        <div><b>Diagnostics</b>Copy diagnostics or open a structured bug report when something needs attention.</div>
       </div>
     </div>
   </section>
