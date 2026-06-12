@@ -6,7 +6,7 @@
 - Added placement styles for preserving size, maximizing, filling the work area, or filling the full monitor.
 - Added a skip-while-playing guard for monitor moves so active windows are not pulled while you are using them.
 - Made keepalive holding more conservative: recent user input now holds sends even when the foreground window check is not exact.
-- Updated release publishing so GitHub Releases use the matching release-note file.
+- Improved release notes so each update is easier to read.
 
 ## v0.1.3
 
