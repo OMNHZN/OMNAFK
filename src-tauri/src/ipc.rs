@@ -47,6 +47,7 @@ pub struct ConfigPayload {
     pub randomize: bool,
     pub jitter_pct: u8,
     pub action: KeepaliveAction,
+    pub adaptive_actions: bool,
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
@@ -109,6 +110,7 @@ impl From<&AppConfig> for ConfigPayload {
             randomize: config.randomize,
             jitter_pct: config.jitter_pct,
             action: config.action,
+            adaptive_actions: config.adaptive_actions,
             key_sequence: config.key_sequence.clone(),
             send_without_focus: config.send_without_focus,
             hold_while_playing: config.hold_while_playing,
@@ -250,6 +252,17 @@ pub fn test_target(
     engine: State<'_, SharedEngine>,
 ) -> Result<StatePayload, String> {
     engine.test_target(&exe, &wclass)?;
+    emit_and_return(&app, engine.inner())
+}
+
+#[tauri::command]
+pub fn reset_learning(
+    exe: String,
+    wclass: String,
+    app: AppHandle,
+    engine: State<'_, SharedEngine>,
+) -> Result<StatePayload, String> {
+    engine.reset_learning(&exe, &wclass);
     emit_and_return(&app, engine.inner())
 }
 
@@ -798,6 +811,7 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
             config.interval = interval;
         }
         "randomize" => config.randomize = bool_value(value, key)?,
+        "adaptive_actions" => config.adaptive_actions = bool_value(value, key)?,
         "jitter_pct" => {
             let pct = value.as_u64().ok_or_else(|| {
                 "Couldn't set jitter - choose a percentage to fix this.".to_string()

@@ -8,6 +8,7 @@ pub mod engine;
 pub mod flyout;
 pub mod ipc;
 pub mod keepalive;
+pub mod learn;
 pub mod setup;
 pub mod stats;
 pub mod tray;
@@ -100,6 +101,7 @@ pub fn run() {
             ipc::clear_overrides,
             ipc::pause_target,
             ipc::test_target,
+            ipc::reset_learning,
             ipc::snooze,
             ipc::set_target_profile,
             ipc::rescan,

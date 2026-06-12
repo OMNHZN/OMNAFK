@@ -31,7 +31,7 @@ Modules: `detector.rs`, `keepalive.rs`, `config.rs`.
 - Keepalive per §11: per-game timer (interval + ±15% jitter when enabled),
   default action Space tap via `PostMessage(WM_KEYDOWN/WM_KEYUP)`;
   focus-flick fallback behind a config flag. "Hold while playing": skip the
-  tick if the target was foreground or received user input in the last 60s
+  tick if the target is foreground and the user sent input in the last 60s
   (`GetForegroundWindow` + `GetLastInputInfo` heuristic).
 - Log every verdict and every tick at `info`.
 
@@ -74,9 +74,10 @@ keyboard focus rings work (§9).
 ## Phase 4 — Persistence, overrides, stats
 
 Override pinning by (exe name, window class) so relaunched games are re-recognized
-(§5.2); closed-game 60s linger; stats per §5.3 with daily "games seen"; import/export
-JSON; autostart registry key behind the Settings toggle (tauri-plugin-autostart);
-global hotkey to open the flyout (tauri-plugin-global-shortcut).
+(§5.2); closed-game 60s linger; adaptive per-game action profiles; stats per
+§5.3 with daily "games seen"; import/export JSON; autostart registry key behind
+the Settings toggle (tauri-plugin-autostart); global hotkey to open the flyout
+(tauri-plugin-global-shortcut).
 
 **Accept:** pin Firefox as GAME, restart app + Firefox, it is kept alive with no
 user action; stats survive restart; export → wipe → import restores everything.

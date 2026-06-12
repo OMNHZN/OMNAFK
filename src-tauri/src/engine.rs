@@ -1,9 +1,10 @@
 use crate::{
-    config::{AppConfig, OverrideVerdict, TargetProfile},
+    config::{AppConfig, OverrideVerdict, ResolvedAction, TargetProfile},
     detector::{self, DetectedWindow, NoGpuUsageProbe, Verdict, WindowFacts},
     keepalive::{
         self, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer, Win32ActivityProbe,
     },
+    learn::{self, LearnedSnapshot},
     stats::{PersistedStats, Stats, StatsSnapshot},
     updates::UpdateCheck,
 };
@@ -68,6 +69,7 @@ pub struct GameSnapshot {
     pub last_action_secs: Option<u64>,
     pub last_action_ok: Option<bool>,
     pub elevated_mismatch: bool,
+    pub learned: Option<LearnedSnapshot>,
     pub profile: GameProfileSnapshot,
 }
 
@@ -91,6 +93,7 @@ pub struct Engine {
     inner: RwLock<EngineInner>,
     stop: AtomicBool,
     worker: Mutex<Option<JoinHandle<()>>>,
+    sampler: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Debug)]
@@ -157,6 +160,7 @@ impl Engine {
             }),
             stop: AtomicBool::new(false),
             worker: Mutex::new(None),
+            sampler: Mutex::new(None),
         })
     }
 
@@ -175,12 +179,86 @@ impl Engine {
             }
             engine.persist_stats(true);
         }));
+
+        // Adaptive-learning sampler: observes which whitelisted keys the user
+        // holds while actively playing a tracked game.
+        let engine = Arc::clone(self);
+        *self.sampler.lock() = Some(thread::spawn(move || {
+            while !engine.stop.load(Ordering::SeqCst) {
+                engine.run_learn_sample();
+                thread::sleep(Duration::from_millis(learn::SAMPLE_INTERVAL_MS));
+            }
+        }));
     }
 
     pub fn stop(&self) {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(worker) = self.worker.lock().take() {
             let _ = worker.join();
+        }
+        if let Some(sampler) = self.sampler.lock().take() {
+            let _ = sampler.join();
+        }
+        self.persist_stats(true);
+    }
+
+    /// One adaptive-learning observation: when the user is actively playing a
+    /// tracked game in the foreground, record which whitelisted keys are held.
+    fn run_learn_sample(&self) {
+        use keepalive::ActivityProbe;
+
+        let candidate = {
+            let inner = self.inner.read();
+            if !inner.config.adaptive_actions
+                || inner.config.suspended
+                || inner.snooze_until.is_some()
+            {
+                return;
+            }
+            let probe = Win32ActivityProbe;
+            let playing = probe
+                .last_input_age(Instant::now())
+                .is_some_and(|age| age <= Duration::from_millis(learn::ACTIVE_INPUT_MS));
+            if !playing {
+                return;
+            }
+            probe.foreground_window().and_then(|foreground| {
+                inner
+                    .windows
+                    .iter()
+                    .find(|(_, window)| {
+                        window.hwnd == foreground
+                            && window.effective == Verdict::Game
+                            && window.gone_since.is_none()
+                    })
+                    .map(|(identity, window)| (identity.clone(), window.title.clone()))
+            })
+        };
+        let Some((identity, title)) = candidate else {
+            return;
+        };
+
+        let keys = learn::pressed_keys();
+        if keys.is_empty() {
+            return;
+        }
+        let week = learn::current_week_key();
+        let mut inner = self.inner.write();
+        if inner.stats.note_learned_sample(&identity, &keys, &week) {
+            inner.push_log(
+                "info",
+                format!("Adaptive profile ready for {title} — keepalives now mimic your inputs"),
+            );
+        }
+    }
+
+    /// Wipe the learned input profile for one target.
+    pub fn reset_learning(&self, exe: &str, wclass: &str) {
+        {
+            let mut inner = self.inner.write();
+            let identity = identity_key(exe, wclass);
+            inner.stats.reset_learned(&identity);
+            inner.push_log("info", format!("Adaptive learning reset for {exe}"));
         }
         self.persist_stats(true);
     }
@@ -235,8 +313,20 @@ impl Engine {
         let now = Instant::now();
         let mut games: Vec<_> = inner
             .windows
-            .values()
-            .map(|window| window.snapshot(&inner.config, now, inner.current_elevated))
+            .iter()
+            .map(|(identity, window)| {
+                let learned = inner.stats.learned_profile(identity).map(|profile| {
+                    let explicit = inner
+                        .config
+                        .profile_for(&window.exe, &window.wclass)
+                        .is_some_and(|p| p.action.is_some());
+                    learn::snapshot(
+                        profile,
+                        inner.config.adaptive_actions && profile.confident() && !explicit,
+                    )
+                });
+                window.snapshot(&inner.config, now, inner.current_elevated, learned)
+            })
             .collect();
         games.sort_by_key(|game| (game.effective != Verdict::Game, game.gone, game.exe.clone()));
 
@@ -322,13 +412,21 @@ impl Engine {
                 "Couldn't test {exe} - the window is not currently visible."
             ));
         };
-        let options = KeepaliveOptions::from_config(&inner.config, &window.exe, &window.wclass);
+        let mut options = KeepaliveOptions::from_config(&inner.config, &window.exe, &window.wclass);
+        let adaptive_key =
+            inner.adaptive_pick(&identity, &window.exe, &window.wclass, &mut thread_rng());
+        if let Some(key) = &adaptive_key {
+            options.action = ResolvedAction::KeySequence(vec![key.clone()]);
+        }
         let target = KeepaliveTarget {
             hwnd: window.hwnd,
             exe: window.exe.clone(),
             wclass: window.wclass.clone(),
         };
-        let label = options.action.label();
+        let label = match &adaptive_key {
+            Some(key) => format!("Adaptive ({key})"),
+            None => options.action.label(),
+        };
         let title = window.title.clone();
         match keepalive::send_keepalive(&target, &options) {
             Ok(()) => {
@@ -534,6 +632,32 @@ impl EngineInner {
         }
     }
 
+    /// Draw a learned key for this target, when adaptive actions apply.
+    /// An explicit per-target action always outranks the learned profile.
+    fn adaptive_pick(
+        &self,
+        identity: &str,
+        exe: &str,
+        wclass: &str,
+        rng: &mut impl rand::Rng,
+    ) -> Option<String> {
+        if !self.config.adaptive_actions {
+            return None;
+        }
+        if self
+            .config
+            .profile_for(exe, wclass)
+            .is_some_and(|profile| profile.action.is_some())
+        {
+            return None;
+        }
+        let profile = self.stats.learned_profile(identity)?;
+        if !profile.confident() {
+            return None;
+        }
+        profile.pick(rng)
+    }
+
     /// Why the engine is currently holding fire across all targets, if at all.
     fn compute_gate(&self, now: Instant, activity: &Win32ActivityProbe) -> Option<String> {
         use crate::keepalive::ActivityProbe;
@@ -630,7 +754,12 @@ impl EngineInner {
 
             active_count += 1;
             let title = window.title.clone();
-            let options = KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
+            let mut options =
+                KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
+            let adaptive_key = self.adaptive_pick(&identity, &window.exe, &window.wclass, rng);
+            if let Some(key) = &adaptive_key {
+                options.action = ResolvedAction::KeySequence(vec![key.clone()]);
+            }
             let target = KeepaliveTarget {
                 hwnd: window.hwnd,
                 exe: window.exe.clone(),
@@ -667,7 +796,14 @@ impl EngineInner {
                     timer.reschedule(now, &options, rng);
                 }
                 TickDecision::Send => {
-                    let label = options.action.label();
+                    // Stats group all adaptive sends together; the log shows the drawn key.
+                    let (label, log_label) = match &adaptive_key {
+                        Some(key) => ("Adaptive".to_string(), format!("Adaptive ({key})")),
+                        None => {
+                            let label = options.action.label();
+                            (label.clone(), label)
+                        }
+                    };
                     match keepalive::send_keepalive(&target, &options) {
                         Ok(()) => {
                             let first = window.actions == 0;
@@ -676,7 +812,7 @@ impl EngineInner {
                             window.last_action_ok = Some(true);
                             self.stats.note_action(&identity, &title, &label);
                             self.last_error = None;
-                            log_entries.push(("action".into(), format!("{label} → {title}")));
+                            log_entries.push(("action".into(), format!("{log_label} → {title}")));
                             if first && notify_all {
                                 notices.push(format!("First keepalive sent to {title}"));
                             }
@@ -733,7 +869,13 @@ impl EngineInner {
 }
 
 impl TrackedWindow {
-    fn snapshot(&self, config: &AppConfig, now: Instant, current_elevated: bool) -> GameSnapshot {
+    fn snapshot(
+        &self,
+        config: &AppConfig,
+        now: Instant,
+        current_elevated: bool,
+        learned: Option<LearnedSnapshot>,
+    ) -> GameSnapshot {
         let profile = config
             .profile_for(&self.exe, &self.wclass)
             .cloned()
@@ -763,6 +905,7 @@ impl TrackedWindow {
                 .map(|at| now.saturating_duration_since(at).as_secs()),
             last_action_ok: self.last_action_ok,
             elevated_mismatch: self.facts.elevated == Some(true) && !current_elevated,
+            learned,
             profile: profile_snapshot(&profile),
         }
     }

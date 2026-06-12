@@ -1,3 +1,4 @@
+use crate::learn::LearnedProfile;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -28,6 +29,7 @@ pub struct PersistedStats {
     pub actions_by_date: BTreeMap<String, u64>,
     pub kept_by_date: BTreeMap<String, u64>,
     pub per_game: BTreeMap<String, GameTotals>,
+    pub learned: BTreeMap<String, LearnedProfile>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -137,6 +139,32 @@ impl Stats {
 
     pub fn note_dormant(&mut self) {
         self.current_streak = 0;
+    }
+
+    /// Record one adaptive-learning observation. Returns true when this
+    /// sample made the game's profile confident for the first time.
+    pub fn note_learned_sample(&mut self, identity: &str, keys: &[&str], week: &str) -> bool {
+        if keys.is_empty() {
+            return false;
+        }
+        let crossed = self
+            .persisted
+            .learned
+            .entry(identity.to_string())
+            .or_default()
+            .note(keys, week);
+        self.dirty = true;
+        crossed
+    }
+
+    pub fn learned_profile(&self, identity: &str) -> Option<&LearnedProfile> {
+        self.persisted.learned.get(identity)
+    }
+
+    pub fn reset_learned(&mut self, identity: &str) {
+        if self.persisted.learned.remove(identity).is_some() {
+            self.dirty = true;
+        }
     }
 
     pub fn reset_session(&mut self) {
@@ -300,6 +328,28 @@ mod tests {
         // Lifetime survives a session reset.
         assert_eq!(snap.lifetime_kept, 30);
         assert_eq!(snap.longest_streak, 30);
+    }
+
+    #[test]
+    fn learned_profiles_persist_and_reset() {
+        let mut stats = Stats::default();
+        for _ in 0..49 {
+            assert!(!stats.note_learned_sample("game.exe\u{1f}CLASS", &["W"], "2026-W24"));
+        }
+        assert!(stats.note_learned_sample("game.exe\u{1f}CLASS", &["SPACE"], "2026-W24"));
+
+        let json = serde_json::to_string(stats.persisted()).expect("serialize");
+        let restored: PersistedStats = serde_json::from_str(&json).expect("deserialize");
+        let revived = Stats::with_persisted(restored);
+        let profile = revived
+            .learned_profile("game.exe\u{1f}CLASS")
+            .expect("profile");
+        assert!(profile.confident());
+        assert_eq!(profile.counts.get("W"), Some(&49));
+
+        let mut revived = revived;
+        revived.reset_learned("game.exe\u{1f}CLASS");
+        assert!(revived.learned_profile("game.exe\u{1f}CLASS").is_none());
     }
 
     #[test]

@@ -186,6 +186,7 @@ pub struct AppConfig {
     pub randomize: bool,
     pub jitter_pct: u8,
     pub action: KeepaliveAction,
+    pub adaptive_actions: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
@@ -280,6 +281,7 @@ impl Default for AppConfig {
             randomize: true,
             jitter_pct: 15,
             action: KeepaliveAction::SpaceTap,
+            adaptive_actions: true,
             key_sequence: Vec::new(),
             send_without_focus: true,
             hold_while_playing: true,
@@ -647,6 +649,7 @@ mod tests {
         assert!(!config.tour_done);
         assert!(config.paused.is_empty());
         assert_eq!(config.action, KeepaliveAction::SpaceTap);
+        assert!(config.adaptive_actions);
         assert!(config.key_sequence.is_empty());
         assert!(config.send_without_focus);
         assert!(config.hold_while_playing);

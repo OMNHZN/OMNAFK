@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.2",
+  "version": "0.1.3",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,7 +22,7 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.2",
+    "current_version": "0.1.3",
     "latest_version": "0.1.7",
     "latest_tag": "v0.1.7",
     "title": "OMNAFK v0.1.7",
@@ -57,6 +57,12 @@ All payloads are JSON (serde). Times are integer seconds.
       "last_action_secs": 448 | null,      // seconds since last keepalive attempt
       "last_action_ok": true | false | null,
       "elevated_mismatch": false,          // target is admin but OMNAFK isn't
+      "learned": {                         // adaptive input profile, null until first sample
+        "samples": 132,
+        "needed": 50,                      // samples required before activation
+        "active": true,                    // keepalives currently draw from this profile
+        "top": [ { "key": "W", "pct": 61 }, { "key": "SPACE", "pct": 22 } ]
+      } | null,
       "profile": {
         "action": "W tap" | null,
         "interval": 60 | null,
@@ -81,6 +87,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "randomize": true,
     "jitter_pct": 5 | 15 | 30,
     "action": "Space tap" | "W tap" | "Camera nudge" | "Mouse wiggle" | "Scroll tick" | "Right click" | "Key sequence…" | "Per-target…",
+    "adaptive_actions": true,              // learn per-game inputs and use them for keepalives
     "key_sequence": ["SPACE"],
     "send_without_focus": true,
     "hold_while_playing": true,
@@ -141,6 +148,7 @@ Lifetime statistics persist separately in `stats.json` next to the config.
 | `clear_overrides` | — | Remove every manual override. Persist. Emit state. |
 | `pause_target` | `{ exe, wclass, paused }` | Pause/resume keepalives for one target without changing its verdict. Persist. Emit state. |
 | `test_target` | `{ exe, wclass }` | Send the resolved keepalive action to that window right now. Emit state. |
+| `reset_learning` | `{ exe, wclass }` | Wipe the adaptive input profile learned for that target. Persist. Emit state. |
 | `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. Emit state. |
 | `rescan` | — | Force immediate detection pass. Emit state. |
 | `set_suspended` | `{ suspended }` | Enter/leave SUSPENDED. Persist. Emit state. |

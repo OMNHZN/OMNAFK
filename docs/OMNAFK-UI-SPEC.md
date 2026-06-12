@@ -190,8 +190,9 @@ The universal building block of every tab.
 | 1 | Interval | Dropdown: 30 sec · 1 min · 2 min · 5 min · 9 min · 14 min · Custom… | 9 min | How often OMNAFK sends the keepalive action to each armed target. "Custom…" opens an inline numeric field (10–3600 sec). |
 | 2 | Randomize timing | Toggle | On | Adds ±15% random jitter to the interval so actions don't fire on a perfectly regular clock. |
 | 3 | Action | Dropdown: Space tap · W tap · Camera nudge (mouse) · Key sequence… · Per-target… | Space tap | What input is sent. "Key sequence…" lets you record up to 4 keys. "Per-target…" defers to each target's profile on the Targets tab. |
-| 4 | Send without focus | Toggle | On | Posts input directly to the target window so your active work is never interrupted. If a game ignores background input, disable this to use brief focus-flick mode. |
-| 5 | Pause while I'm active | Toggle | On | If you've touched the target window in the last 60 seconds, OMNAFK skips the tick — it never fights you for the controls. |
+| 4 | Adaptive action | Toggle | On | Learns a small whitelist of keys used while a marked game is focused, then uses that per-game profile after enough samples. Explicit per-target actions take priority. |
+| 5 | Send without focus | Toggle | On | Posts input directly to the target window so your active work is never interrupted. If a game ignores background input, disable this to use brief focus-flick mode. |
+| 6 | Pause while I'm active | Toggle | On | If you've touched the target window in the last 60 seconds, OMNAFK skips the tick — it never fights you for the controls. |
 
 Below the rows: a hairline divider, then centered fine print (Data 11px, `--text-faint`): `Settings save automatically.`
 
