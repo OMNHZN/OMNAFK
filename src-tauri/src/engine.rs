@@ -718,9 +718,9 @@ impl EngineInner {
             if armed != window.was_armed {
                 window.was_armed = armed;
                 let text = if armed {
-                    format!("Armed: {}", window.title)
+                    format!("{} marked as game", window.title)
                 } else {
-                    format!("Disarmed: {}", window.title)
+                    format!("{} no longer active", window.title)
                 };
                 events.push(text);
             }
@@ -817,10 +817,10 @@ impl EngineInner {
         let gate = self.compute_gate(now, activity);
         if gate != self.gate_reason {
             match &gate {
-                Some(reason) => self.push_log("info", format!("Paused — {reason}")),
+                Some(reason) => self.push_log("info", format!("Held ticks: {reason}")),
                 None => {
                     if self.gate_reason.is_some() {
-                        self.push_log("info", "Resumed — gate cleared".to_string());
+                        self.push_log("info", "Resumed ticks".to_string());
                     }
                 }
             }
@@ -890,6 +890,10 @@ impl EngineInner {
                 TickDecision::Waiting => {}
                 TickDecision::Held => {
                     holding = true;
+                    log_entries.push((
+                        "info".into(),
+                        format!("Held tick: recent input for {title}"),
+                    ));
                     timer.reschedule(now, &options, rng);
                 }
                 TickDecision::Send if gate.is_some() => {
@@ -913,7 +917,8 @@ impl EngineInner {
                             window.last_action_ok = Some(true);
                             self.stats.note_action(&identity, &title, &label);
                             self.last_error = None;
-                            log_entries.push(("action".into(), format!("{log_label} → {title}")));
+                            log_entries
+                                .push(("action".into(), format!("Sent {log_label} to {title}")));
                             if first && notify_all {
                                 notices.push(format!("First keepalive sent to {title}"));
                             }

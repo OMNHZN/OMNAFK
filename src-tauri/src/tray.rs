@@ -1,6 +1,6 @@
 use crate::{
     config,
-    engine::{EngineStatus, SharedEngine},
+    engine::{EngineSnapshot, EngineStatus, SharedEngine},
     flyout, ipc, updates,
 };
 use std::{
@@ -21,6 +21,9 @@ const MENU_SETTINGS: &str = "open_settings";
 const MENU_CHECK_UPDATES: &str = "check_updates";
 const MENU_REPORT_BUG: &str = "report_bug";
 const MENU_QUIT: &str = "quit_omnafk";
+const MENU_STATE: &str = "state_summary";
+const MENU_NEXT_TICK: &str = "next_tick_summary";
+const MENU_TARGETS: &str = "targets_summary";
 
 pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
     let suspend_label = if engine.snapshot().config.suspended {
@@ -32,6 +35,10 @@ pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
         MenuItem::with_id(app, MENU_TOGGLE_SUSPEND, suspend_label, true, None::<&str>)?;
     let open_item = MenuItem::with_id(app, MENU_OPEN, "Open flyout", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, MENU_SETTINGS, "Settings", true, None::<&str>)?;
+    let state_item = MenuItem::with_id(app, MENU_STATE, "State: Dormant", false, None::<&str>)?;
+    let next_item = MenuItem::with_id(app, MENU_NEXT_TICK, "Next tick: --", false, None::<&str>)?;
+    let targets_item =
+        MenuItem::with_id(app, MENU_TARGETS, "Targets: 0 active", false, None::<&str>)?;
     let update_item = MenuItem::with_id(
         app,
         MENU_CHECK_UPDATES,
@@ -46,13 +53,16 @@ pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
         &[
+            &state_item,
+            &next_item,
+            &targets_item,
+            &separator_one,
             &open_item,
             &settings_item,
             &update_item,
             &bug_item,
-            &separator_one,
-            &suspend_item,
             &separator_two,
+            &suspend_item,
             &quit_item,
         ],
     )?;
@@ -73,7 +83,14 @@ pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    spawn_tray_state_loop(tray, suspend_item, engine);
+    spawn_tray_state_loop(
+        tray,
+        suspend_item,
+        state_item,
+        next_item,
+        targets_item,
+        engine,
+    );
     Ok(())
 }
 
@@ -135,7 +152,14 @@ fn handle_menu_event(
     }
 }
 
-fn spawn_tray_state_loop(tray: TrayIcon<Wry>, suspend_item: MenuItem<Wry>, engine: SharedEngine) {
+fn spawn_tray_state_loop(
+    tray: TrayIcon<Wry>,
+    suspend_item: MenuItem<Wry>,
+    state_item: MenuItem<Wry>,
+    next_item: MenuItem<Wry>,
+    targets_item: MenuItem<Wry>,
+    engine: SharedEngine,
+) {
     thread::spawn(move || {
         let blink = AtomicBool::new(false);
         loop {
@@ -148,7 +172,11 @@ fn spawn_tray_state_loop(tray: TrayIcon<Wry>, suspend_item: MenuItem<Wry>, engin
             if let Ok(icon) = icon_for(state, blink_on) {
                 let _ = tray.set_icon(Some(icon));
             }
-            let _ = tray.set_tooltip(Some(tooltip_for(state, snapshot.next_tick)));
+            let _ = tray.set_tooltip(Some(tooltip_for(&snapshot)));
+            let (state_label, next_label, targets_label) = menu_summaries(&snapshot);
+            let _ = state_item.set_text(state_label);
+            let _ = next_item.set_text(next_label);
+            let _ = targets_item.set_text(targets_label);
             let _ = suspend_item.set_text(if suspended {
                 "Resume watching"
             } else {
@@ -158,27 +186,85 @@ fn spawn_tray_state_loop(tray: TrayIcon<Wry>, suspend_item: MenuItem<Wry>, engin
     });
 }
 
-fn tooltip_for(state: EngineStatus, next_tick: Option<u64>) -> String {
-    match state {
-        EngineStatus::Dormant => "OMNAFK - DORMANT".to_string(),
-        EngineStatus::Suspended => "OMNAFK - SUSPENDED".to_string(),
-        EngineStatus::Holding => "OMNAFK - HOLDING".to_string(),
-        EngineStatus::Active => {
-            let next = next_tick.unwrap_or_default();
-            format!(
-                "OMNAFK - ACTIVE - NEXT TICK {:02}:{:02}",
-                next / 60,
-                next % 60
-            )
-        }
-    }
+fn tooltip_for(snapshot: &EngineSnapshot) -> String {
+    let (state, next, targets) = menu_summaries(snapshot);
+    format!("OMNAFK\n{state}\n{next}\n{targets}")
 }
 
-fn icon_for(state: EngineStatus, _blink_on: bool) -> tauri::Result<Image<'static>> {
+fn menu_summaries(snapshot: &EngineSnapshot) -> (String, String, String) {
+    let active: Vec<_> = snapshot
+        .games
+        .iter()
+        .filter(|game| {
+            game.effective == crate::detector::Verdict::Game && !game.gone && !game.paused
+        })
+        .collect();
+    let ignored = snapshot
+        .games
+        .iter()
+        .filter(|game| game.effective == crate::detector::Verdict::Ignored && !game.gone)
+        .count();
+    let state = match snapshot.engine {
+        EngineStatus::Dormant => "OMNAFK - DORMANT".to_string(),
+        EngineStatus::Suspended => {
+            if let Some(remaining) = snapshot.snooze_remaining {
+                format!("OMNAFK - SNOOZED - BACK IN {}", mmss(remaining))
+            } else {
+                "OMNAFK - SUSPENDED".to_string()
+            }
+        }
+        EngineStatus::Holding => snapshot
+            .paused_reason
+            .as_ref()
+            .map(|reason| format!("OMNAFK - HOLDING - {reason}"))
+            .unwrap_or_else(|| "OMNAFK - HOLDING - RECENT INPUT".to_string()),
+        EngineStatus::Active => {
+            if active.len() == 1 {
+                format!("OMNAFK - ACTIVE - {}", compact_title(&active[0].title))
+            } else {
+                format!("OMNAFK - ACTIVE - {} TARGETS", active.len())
+            }
+        }
+    };
+    let next = match snapshot.engine {
+        EngineStatus::Active => snapshot
+            .next_tick
+            .map(|seconds| format!("Next tick: {}", mmss(seconds)))
+            .unwrap_or_else(|| "Next tick: --".to_string()),
+        EngineStatus::Holding => "Next tick: held".to_string(),
+        _ => "Next tick: --".to_string(),
+    };
+    let targets = format!("Targets: {} active, {} ignored", active.len(), ignored);
+    (
+        format!("State: {}", state.trim_start_matches("OMNAFK - ")),
+        next,
+        targets,
+    )
+}
+
+fn mmss(seconds: u64) -> String {
+    format!("{:02}:{:02}", seconds / 60, seconds % 60)
+}
+
+fn compact_title(title: &str) -> String {
+    const MAX: usize = 28;
+    let mut out = String::new();
+    for ch in title.chars().take(MAX) {
+        out.push(ch);
+    }
+    if title.chars().count() > MAX {
+        out.push('…');
+    }
+    out
+}
+
+fn icon_for(state: EngineStatus, blink_on: bool) -> tauri::Result<Image<'static>> {
     match state {
-        EngineStatus::Active | EngineStatus::Holding => {
+        EngineStatus::Active => Image::from_bytes(include_bytes!("../icons/sentinel-active.png")),
+        EngineStatus::Holding if blink_on => {
             Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))
         }
+        EngineStatus::Holding => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
         EngineStatus::Suspended => {
             Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png"))
         }

@@ -111,7 +111,12 @@
            background:var(--surface);font-size:12px;line-height:1.5;color:var(--text-dim)}
   .tourbar.show{display:block}
   .tourbar b{color:var(--text);font-weight:600}
-  .tourbar .btn2{margin-top:8px;height:26px;font-size:11px}
+  .tourbar .btn2{height:26px;font-size:11px}
+  .tourgrid{display:grid;gap:8px;margin-top:10px}
+  .setuprow{min-height:34px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding-top:8px}
+  .setuprow .rlabel{font-size:12px;color:var(--text);flex:1}
+  .setuprow .dd-btn{height:28px;font-size:12px;min-width:116px}
+  .touractions{display:flex;justify-content:flex-end;margin-top:10px}
   .warnbar{display:none;padding:8px 16px;font-size:11px;line-height:1.4;color:var(--text-dim);
            border-top:1px solid var(--border);background:var(--surface);font-family:var(--body)}
   .warnbar.show{display:block}
@@ -323,10 +328,26 @@
     <!-- GENERAL -->
     <div class="pane active" id="pane-general">
       <div class="tourbar" id="tourbar">
-        <b>Welcome to OMNAFK.</b> It watches automatically — running games appear in <b>Sightline</b>,
-        where you can click any mark to overrule it. Keepalives start on their own; pick the action and
-        interval below.
-        <div><button class="btn2" id="tourDismiss">Got it</button></div>
+        <b>Quiet setup.</b> Pick the defaults once; OMNAFK watches from the tray and saves changes immediately.
+        <div class="tourgrid">
+          <div class="setuprow">
+            <span class="rlabel">Start with Windows</span>
+            <button data-key="autostart" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+          </div>
+          <div class="setuprow">
+            <span class="rlabel">Sight sensitivity</span>
+            <div class="dropdown" data-key="sensitivity" data-options="Strict,Standard,Broad" data-value="Standard"></div>
+          </div>
+          <div class="setuprow">
+            <span class="rlabel">Default action</span>
+            <div class="dropdown" data-key="action" data-options="Space tap,W tap,Camera nudge,Mouse wiggle,Scroll tick,Right click,Key sequence…,Per-target…" data-value="Space tap"></div>
+          </div>
+          <div class="setuprow">
+            <span class="rlabel">Move games to monitor</span>
+            <button data-key="monitor_placement" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          </div>
+        </div>
+        <div class="touractions"><button class="btn2" id="tourDismiss">Done</button></div>
       </div>
       <div class="row">
         <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 3"/><path d="M17 3l4 4"/></svg>
@@ -940,6 +961,31 @@ function factChips(w){
   host.appendChild(score);
   return host;
 }
+function detectionReasons(w){
+  const f=w.facts||{},reasons=[];
+  if(f.known_game)reasons.push('known game process');
+  if(f.platform_path)reasons.push('game folder');
+  if(f.fullscreen)reasons.push('fullscreen window');
+  if(f.borderless)reasons.push('borderless window');
+  if(f.gfx_dll)reasons.push('graphics runtime');
+  if(f.negative_class)reasons.push('system/app window class');
+  if(!reasons.length)reasons.push(w.overridden?'pinned by you':'score '+w.score+' / '+w.threshold);
+  return reasons;
+}
+function adaptiveLabel(st,w){
+  if(!st.config.adaptive_actions)return 'Adaptive: off';
+  const learned=w.learned;
+  if(!learned||learned.samples<=0)return 'Adaptive: learning 0/'+(learned?.needed||50);
+  if(learned.active){
+    const top=(learned.top&&learned.top[0])?(' - '+learned.top[0].key.toLowerCase()):'';
+    return 'Adaptive: ready'+top+' ('+learned.samples+' samples)';
+  }
+  return 'Adaptive: learning '+Math.min(learned.samples,learned.needed)+'/'+learned.needed;
+}
+function monitorStatusLabel(w){
+  if(!w.monitor||!w.monitor.target)return null;
+  return 'Monitor: '+w.monitor.target+' - '+(w.monitor.status||'waiting');
+}
 function verdictLabel(value){
   return value==='game'?'MARKED':String(value||'').toUpperCase();
 }
@@ -965,7 +1011,9 @@ function targetRow(st,w,offline){
   row.querySelector('.ttitle').textContent=w.title+(w.paused?' (paused)':'');
   row.querySelector('.texe').textContent=w.exe;
   const meta=row.querySelector('.tmeta');
-  if(!offline&&!w.gone&&w.effective==='game'&&!w.paused&&w.next_tick!=null)meta.textContent='⏱ '+fmt(w.next_tick);
+  const holdingTarget=st.engine==='holding'&&w.effective==='game'&&!w.gone&&!w.paused;
+  if(holdingTarget)meta.textContent='HOLDING';
+  else if(!offline&&!w.gone&&w.effective==='game'&&!w.paused&&w.next_tick!=null)meta.textContent='⏱ '+fmt(w.next_tick);
   if(w.elevated_mismatch)meta.textContent='⚠ admin';
   const prof=document.createElement('button');prof.className='profbtn';prof.textContent='details';
   prof.addEventListener('click',e=>{e.stopPropagation();toggleOpen();});
@@ -978,21 +1026,26 @@ function targetRow(st,w,offline){
       prow.appendChild(factChips(w));
       const info=document.createElement('div');info.className='prowinfo';
       const bits=[];
-      if(w.effective==='game'&&!w.gone&&!w.paused&&w.next_tick!=null)bits.push('Next tick in '+fmt(w.next_tick));
+      bits.push('Why detected: '+detectionReasons(w).join(', '));
+      bits.push(adaptiveLabel(st,w));
+      const monitorLine=monitorStatusLabel(w);
+      if(monitorLine)bits.push(monitorLine);
+      if(holdingTarget)bits.push(st.paused_reason?'Holding: '+st.paused_reason:'Holding: recent input');
+      else if(w.effective==='game'&&!w.gone&&!w.paused&&w.next_tick!=null)bits.push('Next tick in '+fmt(w.next_tick));
       if(w.last_action_secs!=null)bits.push('Last action '+fmt(w.last_action_secs)+' ago '+(w.last_action_ok===false?'✗ failed':'✓'));
       else bits.push('No actions sent yet');
-      if(w.monitor&&w.monitor.target)bits.push('Monitor: '+w.monitor.target+(w.monitor.status?' ('+w.monitor.status+')':''));
       if(w.elevated_mismatch)bits.push('Runs as administrator — input may be blocked. Restart OMNAFK as admin.');
       info.textContent=bits.join(' · ');
       prow.appendChild(info);
-      if(w.learned&&w.learned.samples>0){
+      if(st.config.adaptive_actions&&w.effective==='game'){
         const lchips=document.createElement('div');lchips.className='factchips';
-        const tag=document.createElement('span');tag.className='factchip'+(w.learned.active?' hit':'');
-        tag.textContent=w.learned.active?'adaptive on':'learning '+Math.min(w.learned.samples,w.learned.needed)+'/'+w.learned.needed;
-        tag.title=w.learned.active?'Keepalives for this game now mimic your own inputs'
-          :'Play with this window focused — adaptive keepalives switch on at '+w.learned.needed+' samples';
+        const samples=w.learned?.samples||0,needed=w.learned?.needed||50;
+        const tag=document.createElement('span');tag.className='factchip'+(w.learned?.active?' hit':'');
+        tag.textContent=w.learned?.active?'adaptive ready':'learning '+Math.min(samples,needed)+'/'+needed;
+        tag.title=w.learned?.active?'Keepalives for this game now mimic your own inputs'
+          :'Play with this window focused — adaptive keepalives switch on at '+needed+' samples';
         lchips.appendChild(tag);
-        (w.learned.top||[]).forEach(t=>{
+        (w.learned?.top||[]).forEach(t=>{
           const c=document.createElement('span');c.className='factchip';
           c.textContent=t.key.toLowerCase()+' '+t.pct+'%';lchips.appendChild(c);});
         prow.appendChild(lchips);
@@ -1190,7 +1243,7 @@ function renderStatus(st){
   }else if(e==='dormant'){
     line='DORMANT — WATCHING';
   }else if(e==='holding'){
-    line=st.paused_reason?'PAUSED — '+st.paused_reason:'AWAKE — HOLDING';
+    line=st.paused_reason?'HOLDING — '+st.paused_reason:'HOLDING — RECENT INPUT';
   }else{
     line=null;
   }
