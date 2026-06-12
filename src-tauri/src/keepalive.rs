@@ -158,13 +158,20 @@ pub fn tick_decision(
 }
 
 pub fn should_hold(
-    target: &KeepaliveTarget,
+    _target: &KeepaliveTarget,
+    options: &KeepaliveOptions,
+    now: Instant,
+    activity: &dyn ActivityProbe,
+) -> bool {
+    recent_user_input(options, now, activity)
+}
+
+pub fn recent_user_input(
     options: &KeepaliveOptions,
     now: Instant,
     activity: &dyn ActivityProbe,
 ) -> bool {
     options.hold_while_playing
-        && activity.foreground_window() == Some(target.hwnd)
         && activity
             .last_input_age(now)
             .is_some_and(|age| age <= Duration::from_secs(options.hold_window_secs.max(1)))
@@ -580,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn hold_skip_logic_uses_foreground_and_recent_input() {
+    fn hold_skip_logic_uses_recent_input_conservatively() {
         let now = Instant::now();
         let target = target();
         let options = options();
@@ -601,6 +608,6 @@ mod tests {
             foreground: Some(11),
             last_input_at: Some(now - Duration::from_secs(10)),
         };
-        assert!(!should_hold(&target, &options, now, &other_window));
+        assert!(should_hold(&target, &options, now, &other_window));
     }
 }

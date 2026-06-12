@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.3",
+  "version": "0.1.4",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,7 +22,7 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.3",
+    "current_version": "0.1.4",
     "latest_version": "0.1.7",
     "latest_tag": "v0.1.7",
     "title": "OMNAFK v0.1.7",
@@ -66,7 +66,12 @@ All payloads are JSON (serde). Times are integer seconds.
       "profile": {
         "action": "W tap" | null,
         "interval": 60 | null,
-        "key_sequence": ["SPACE", "W"]
+        "key_sequence": ["SPACE", "W"],
+        "monitor": "Use global" | "Don't move" | null
+      },
+      "monitor": {
+        "target": "Monitor 2 (1920×1080)" | null,
+        "status": "On target" | "Moved" | "Waiting (active)" | "Monitor disconnected" | "Move failed" | null
       }
     }
   ],
@@ -87,7 +92,13 @@ All payloads are JSON (serde). Times are integer seconds.
     "randomize": true,
     "jitter_pct": 5 | 15 | 30,
     "action": "Space tap" | "W tap" | "Camera nudge" | "Mouse wiggle" | "Scroll tick" | "Right click" | "Key sequence…" | "Per-target…",
-    "adaptive_actions": true,              // learn per-game inputs and use them for keepalives
+    "adaptive_actions": true,
+    "monitor_placement": false,
+    "monitor_device": null,
+    "monitor_when": "Always" | "On launch",
+    "monitor_style": "Preserve size" | "Maximize" | "Fill work area" | "Fill monitor",
+    "monitor_skip_active": true,
+    "monitor_skip_active_secs": 3 | 5 | 10 | 30,
     "key_sequence": ["SPACE"],
     "send_without_focus": true,
     "hold_while_playing": true,
@@ -149,7 +160,8 @@ Lifetime statistics persist separately in `stats.json` next to the config.
 | `pause_target` | `{ exe, wclass, paused }` | Pause/resume keepalives for one target without changing its verdict. Persist. Emit state. |
 | `test_target` | `{ exe, wclass }` | Send the resolved keepalive action to that window right now. Emit state. |
 | `reset_learning` | `{ exe, wclass }` | Wipe the adaptive input profile learned for that target. Persist. Emit state. |
-| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. Emit state. |
+| `list_monitors` | — | Return connected displays: `[{ device, label, primary, width, height }]`. |
+| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. Emit state. |
 | `rescan` | — | Force immediate detection pass. Emit state. |
 | `set_suspended` | `{ suspended }` | Enter/leave SUSPENDED. Persist. Emit state. |
 | `snooze` | `{ minutes }` | Suspend for N minutes, auto-resume after (0 cancels an active snooze). Emit state. |

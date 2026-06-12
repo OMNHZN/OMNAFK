@@ -34,9 +34,20 @@ jobs:
         shell: pwsh
         run: ./scripts/build-custom-installer.ps1 -KeepBuildCache
 
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $path = "docs/releases/${{ github.ref_name }}.md"
+          if (Test-Path $path) {
+            Copy-Item $path release-notes.md
+          } else {
+            "Stable OMNAFK build ${{ github.ref_name }}." | Set-Content release-notes.md
+          }
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           name: OMNAFK ${{ github.ref_name }}
+          body_path: release-notes.md
           files: dist/OMNAFK-Setup.exe
           prerelease: ${{ contains(github.ref_name, '-') }}

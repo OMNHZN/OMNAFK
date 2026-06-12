@@ -15,14 +15,15 @@ OMNAFK is wired for GitHub Releases at `OMNHZN/OMNAFK`.
 3. Tag the release:
 
 ```powershell
-git tag v0.1.3
+git tag v0.1.4
 git push origin main
-git push origin v0.1.3
+git push origin v0.1.4
 ```
 
 The `Release` workflow builds the custom `dist/OMNAFK-Setup.exe` executable and
-attaches it to the GitHub release. OMNAFK's Settings tab checks that release feed
-and opens the newest installer asset when an update is available.
+attaches it to the GitHub release. If `docs/releases/<tag>.md` exists, those
+notes become the GitHub release body. OMNAFK's Settings tab checks that release
+feed and opens the newest installer asset when an update is available.
 
 For a local release build:
 

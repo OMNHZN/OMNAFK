@@ -1,12 +1,12 @@
 use crate::{
     config::{
-        self, parse_hhmm, validate_key_sequence, Accent, AppConfig, KeepaliveAction,
-        NotificationLevel, OverrideVerdict, SafetyNoteDisplay, Sensitivity, TabLabelMode,
-        TargetAction, TargetDensity, TargetSort, TargetView, UpdateChannel, UpdatePromptMode,
-        VersionDisplay,
+        self, parse_hhmm, validate_key_sequence, Accent, AppConfig, KeepaliveAction, MonitorStyle,
+        MonitorWhen, NotificationLevel, OverrideVerdict, SafetyNoteDisplay, Sensitivity,
+        TabLabelMode, TargetAction, TargetDensity, TargetSort, TargetView, UpdateChannel,
+        UpdatePromptMode, VersionDisplay,
     },
     engine::{ActivityEvent, EngineStatus, GameSnapshot, SharedEngine},
-    flyout,
+    flyout, monitor,
     stats::StatsSnapshot,
     updates,
 };
@@ -86,6 +86,12 @@ pub struct ConfigPayload {
     pub update_prompt_mode: UpdatePromptMode,
     pub accent: Accent,
     pub file_logging: bool,
+    pub monitor_placement: bool,
+    pub monitor_device: Option<String>,
+    pub monitor_when: MonitorWhen,
+    pub monitor_style: MonitorStyle,
+    pub monitor_skip_active: bool,
+    pub monitor_skip_active_secs: u64,
     pub tour_done: bool,
     pub armed_overrides: Vec<ArmedOverride>,
 }
@@ -149,10 +155,21 @@ impl From<&AppConfig> for ConfigPayload {
             update_prompt_mode: config.update_prompt_mode,
             accent: config.accent,
             file_logging: config.file_logging,
+            monitor_placement: config.monitor_placement,
+            monitor_device: config.monitor_device.clone(),
+            monitor_when: config.monitor_when,
+            monitor_style: config.monitor_style,
+            monitor_skip_active: config.monitor_skip_active,
+            monitor_skip_active_secs: config.monitor_skip_active_secs,
             tour_done: config.tour_done,
             armed_overrides,
         }
     }
+}
+
+#[tauri::command]
+pub fn list_monitors() -> Vec<monitor::MonitorInfo> {
+    monitor::list_monitors()
 }
 
 #[tauri::command]
@@ -280,12 +297,14 @@ pub fn snooze(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn set_target_profile(
     exe: String,
     wclass: String,
     action: Option<String>,
     interval: Option<u64>,
     key_sequence: Option<Vec<String>>,
+    monitor: Option<String>,
     app: AppHandle,
     engine: State<'_, SharedEngine>,
 ) -> Result<StatePayload, String> {
@@ -315,6 +334,12 @@ pub fn set_target_profile(
             validate_key_sequence(&keys)?;
             profile.key_sequence = keys;
         }
+
+        profile.monitor = match monitor.as_deref() {
+            None | Some("") | Some("Use global") => None,
+            Some("Don't move") => Some("Don't move".to_string()),
+            Some(device) => Some(device.to_string()),
+        };
 
         config.set_profile(&exe, &wclass, profile);
         Ok(())
@@ -812,6 +837,35 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
         }
         "randomize" => config.randomize = bool_value(value, key)?,
         "adaptive_actions" => config.adaptive_actions = bool_value(value, key)?,
+        "monitor_placement" => config.monitor_placement = bool_value(value, key)?,
+        "monitor_skip_active" => config.monitor_skip_active = bool_value(value, key)?,
+        "monitor_device" => {
+            let raw = string_value(value, key)?;
+            config.monitor_device = if raw.is_empty() || raw == "Off" {
+                None
+            } else {
+                Some(raw)
+            };
+        }
+        "monitor_when" => {
+            config.monitor_when = parse_monitor_when(string_value(value, key)?.as_str())?
+        }
+        "monitor_style" => {
+            config.monitor_style = parse_monitor_style(string_value(value, key)?.as_str())?
+        }
+        "monitor_skip_active_secs" => {
+            let secs = value.as_u64().ok_or_else(|| {
+                "Couldn't set monitor skip window - choose a number of seconds to fix this."
+                    .to_string()
+            })?;
+            if !(1..=60).contains(&secs) {
+                return Err(
+                    "Couldn't set monitor skip window - choose 1 to 60 seconds to fix this."
+                        .to_string(),
+                );
+            }
+            config.monitor_skip_active_secs = secs;
+        }
         "jitter_pct" => {
             let pct = value.as_u64().ok_or_else(|| {
                 "Couldn't set jitter - choose a percentage to fix this.".to_string()
@@ -1062,6 +1116,29 @@ fn parse_target_sort(value: &str) -> Result<TargetSort, String> {
         "Status" => Ok(TargetSort::Status),
         "Name" => Ok(TargetSort::Name),
         _ => Err("Couldn't set targets sort - choose Status or Name to fix this.".to_string()),
+    }
+}
+
+fn parse_monitor_when(value: &str) -> Result<MonitorWhen, String> {
+    match value {
+        "Always" => Ok(MonitorWhen::Always),
+        "On launch" => Ok(MonitorWhen::OnLaunch),
+        _ => {
+            Err("Couldn't set monitor timing - choose Always or On launch to fix this.".to_string())
+        }
+    }
+}
+
+fn parse_monitor_style(value: &str) -> Result<MonitorStyle, String> {
+    match value {
+        "Preserve size" => Ok(MonitorStyle::Preserve),
+        "Maximize" => Ok(MonitorStyle::Maximize),
+        "Fill work area" => Ok(MonitorStyle::FillWorkArea),
+        "Fill monitor" => Ok(MonitorStyle::FillMonitor),
+        _ => Err(
+            "Couldn't set monitor placement style - choose Preserve size, Maximize, Fill work area, or Fill monitor to fix this."
+                .to_string(),
+        ),
     }
 }
 

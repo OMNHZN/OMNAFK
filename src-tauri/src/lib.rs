@@ -9,6 +9,7 @@ pub mod flyout;
 pub mod ipc;
 pub mod keepalive;
 pub mod learn;
+pub mod monitor;
 pub mod setup;
 pub mod stats;
 pub mod tray;
@@ -94,6 +95,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ipc::list_monitors,
             ipc::get_state,
             ipc::set_config,
             ipc::cycle_override,

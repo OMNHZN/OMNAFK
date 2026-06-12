@@ -85,6 +85,34 @@ pub struct TargetProfile {
     pub interval: Option<u64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub key_sequence: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MonitorWhen {
+    #[serde(rename = "Always")]
+    Always,
+    #[serde(rename = "On launch")]
+    OnLaunch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MonitorStyle {
+    #[serde(rename = "Preserve size")]
+    Preserve,
+    #[serde(rename = "Maximize")]
+    Maximize,
+    #[serde(rename = "Fill work area")]
+    FillWorkArea,
+    #[serde(rename = "Fill monitor")]
+    FillMonitor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedMonitor {
+    Off,
+    Device(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -226,6 +254,13 @@ pub struct AppConfig {
     pub update_prompt_mode: UpdatePromptMode,
     pub accent: Accent,
     pub file_logging: bool,
+    pub monitor_placement: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor_device: Option<String>,
+    pub monitor_when: MonitorWhen,
+    pub monitor_style: MonitorStyle,
+    pub monitor_skip_active: bool,
+    pub monitor_skip_active_secs: u64,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
@@ -320,6 +355,12 @@ impl Default for AppConfig {
             update_prompt_mode: UpdatePromptMode::CardAndToast,
             accent: Accent::Mono,
             file_logging: false,
+            monitor_placement: false,
+            monitor_device: None,
+            monitor_when: MonitorWhen::Always,
+            monitor_style: MonitorStyle::Preserve,
+            monitor_skip_active: true,
+            monitor_skip_active_secs: 5,
             suspended: false,
             pin_position: None,
             first_run_notified: false,
@@ -374,7 +415,10 @@ impl AppConfig {
 
     pub fn set_profile(&mut self, exe: &str, wclass: &str, profile: TargetProfile) {
         let exe_key = identity_exe_key(exe);
-        if profile.action.is_none() && profile.interval.is_none() && profile.key_sequence.is_empty()
+        if profile.action.is_none()
+            && profile.interval.is_none()
+            && profile.key_sequence.is_empty()
+            && profile.monitor.is_none()
         {
             if let Some(classes) = self.profiles.get_mut(&exe_key) {
                 classes.remove(wclass);
@@ -411,6 +455,29 @@ impl AppConfig {
         };
 
         ResolvedKeepalive { interval, action }
+    }
+
+    /// Resolve which monitor a target should live on, if any.
+    pub fn resolve_monitor(&self, exe: &str, wclass: &str) -> ResolvedMonitor {
+        if !self.monitor_placement {
+            return ResolvedMonitor::Off;
+        }
+
+        if let Some(profile) = self.profile_for(exe, wclass) {
+            if let Some(monitor) = &profile.monitor {
+                if monitor == "Don't move" {
+                    return ResolvedMonitor::Off;
+                }
+                return ResolvedMonitor::Device(monitor.clone());
+            }
+        }
+
+        self.monitor_device
+            .as_ref()
+            .filter(|device| !device.is_empty())
+            .cloned()
+            .map(ResolvedMonitor::Device)
+            .unwrap_or(ResolvedMonitor::Off)
     }
 
     pub fn is_paused(&self, exe: &str, wclass: &str) -> bool {
@@ -644,6 +711,12 @@ mod tests {
         assert_eq!(config.target_sort, TargetSort::Status);
         assert_eq!(config.accent, Accent::Mono);
         assert!(!config.file_logging);
+        assert!(!config.monitor_placement);
+        assert!(config.monitor_device.is_none());
+        assert_eq!(config.monitor_when, MonitorWhen::Always);
+        assert_eq!(config.monitor_style, MonitorStyle::Preserve);
+        assert!(config.monitor_skip_active);
+        assert_eq!(config.monitor_skip_active_secs, 5);
         assert!(config.suspend_hotkey.is_empty());
         assert!(config.general_advanced_collapsed);
         assert!(!config.tour_done);
@@ -705,6 +778,7 @@ mod tests {
                 action: Some(TargetAction::WTap),
                 interval: Some(60),
                 key_sequence: vec![],
+                ..TargetProfile::default()
             },
         );
 
@@ -758,6 +832,7 @@ mod tests {
                 action: Some(TargetAction::CameraNudge),
                 interval: Some(30),
                 key_sequence: vec![],
+                ..TargetProfile::default()
             },
         );
 
@@ -821,12 +896,55 @@ mod tests {
                 action: Some(TargetAction::KeySequence),
                 interval: None,
                 key_sequence: vec![],
+                ..TargetProfile::default()
             },
         );
 
         assert_eq!(
             config.resolve_keepalive("game.exe", "CLASS").action,
             ResolvedAction::SpaceTap
+        );
+    }
+
+    #[test]
+    fn resolve_monitor_honors_global_per_target_and_off() {
+        let mut config = AppConfig::default();
+        assert!(matches!(
+            config.resolve_monitor("a.exe", "X"),
+            ResolvedMonitor::Off
+        ));
+
+        config.monitor_placement = true;
+        config.monitor_device = Some(r"\\.\DISPLAY2".to_string());
+        assert_eq!(
+            config.resolve_monitor("a.exe", "X"),
+            ResolvedMonitor::Device(r"\\.\DISPLAY2".to_string())
+        );
+
+        config.set_profile(
+            "a.exe",
+            "X",
+            TargetProfile {
+                monitor: Some("Don't move".to_string()),
+                ..TargetProfile::default()
+            },
+        );
+        assert!(matches!(
+            config.resolve_monitor("a.exe", "X"),
+            ResolvedMonitor::Off
+        ));
+
+        config.set_profile(
+            "a.exe",
+            "X",
+            TargetProfile {
+                monitor: Some(r"\\.\DISPLAY3".to_string()),
+                ..TargetProfile::default()
+            },
+        );
+        assert_eq!(
+            config.resolve_monitor("a.exe", "X"),
+            ResolvedMonitor::Device(r"\\.\DISPLAY3".to_string())
         );
     }
 }

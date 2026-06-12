@@ -1,10 +1,11 @@
 use crate::{
-    config::{AppConfig, OverrideVerdict, ResolvedAction, TargetProfile},
+    config::{AppConfig, OverrideVerdict, ResolvedAction, ResolvedMonitor, TargetProfile},
     detector::{self, DetectedWindow, NoGpuUsageProbe, Verdict, WindowFacts},
     keepalive::{
         self, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer, Win32ActivityProbe,
     },
     learn::{self, LearnedSnapshot},
+    monitor::{self, MonitorInfo, PlacementOptions, PlacementResult},
     stats::{PersistedStats, Stats, StatsSnapshot},
     updates::UpdateCheck,
 };
@@ -48,6 +49,13 @@ pub struct GameProfileSnapshot {
     pub action: Option<String>,
     pub interval: Option<u64>,
     pub key_sequence: Vec<String>,
+    pub monitor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GameMonitorSnapshot {
+    pub target: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,6 +78,7 @@ pub struct GameSnapshot {
     pub last_action_ok: Option<bool>,
     pub elevated_mismatch: bool,
     pub learned: Option<LearnedSnapshot>,
+    pub monitor: GameMonitorSnapshot,
     pub profile: GameProfileSnapshot,
 }
 
@@ -133,6 +142,8 @@ struct TrackedWindow {
     last_action_at: Option<Instant>,
     last_action_ok: Option<bool>,
     was_armed: bool,
+    monitor_placed: bool,
+    monitor_status: Option<String>,
 }
 
 impl Engine {
@@ -550,6 +561,10 @@ impl EngineInner {
             self.windows
                 .entry(identity.clone())
                 .and_modify(|window| {
+                    if window.hwnd != detected.hwnd {
+                        window.monitor_placed = false;
+                        window.monitor_status = None;
+                    }
                     window.title = detected.facts.title.clone();
                     window.exe = detected.facts.exe.clone();
                     window.wclass = detected.facts.wclass.clone();
@@ -580,6 +595,8 @@ impl EngineInner {
                     last_action_at: None,
                     last_action_ok: None,
                     was_armed: false,
+                    monitor_placed: false,
+                    monitor_status: None,
                 });
 
             if effective == Verdict::Game {
@@ -601,7 +618,91 @@ impl EngineInner {
 
         self.recompute_effective(now);
         self.note_armed_transitions();
+        self.place_windows(now, &activity);
         self.drive_keepalives(now, elapsed, &activity, &mut rng);
+    }
+
+    fn place_windows(&mut self, now: Instant, activity: &Win32ActivityProbe) {
+        if !self.config.monitor_placement {
+            return;
+        }
+
+        let monitors = monitor::list_monitors();
+        let options = PlacementOptions {
+            when: self.config.monitor_when,
+            style: self.config.monitor_style,
+            skip_active: self.config.monitor_skip_active,
+            skip_active_secs: self.config.monitor_skip_active_secs,
+        };
+
+        let identities: Vec<String> = self.windows.keys().cloned().collect();
+        for identity in identities {
+            let Some(window) = self.windows.get(&identity) else {
+                continue;
+            };
+            if window.effective != Verdict::Game || window.gone_since.is_some() {
+                continue;
+            }
+            if self.config.is_paused(&window.exe, &window.wclass) {
+                continue;
+            }
+
+            let exe = window.exe.clone();
+            let wclass = window.wclass.clone();
+            let hwnd = window.hwnd;
+            let facts = window.facts.clone();
+            let title = window.title.clone();
+            let placed = window.monitor_placed;
+
+            let (target_device, target_label) = match self.config.resolve_monitor(&exe, &wclass) {
+                ResolvedMonitor::Off => {
+                    if let Some(window) = self.windows.get_mut(&identity) {
+                        window.monitor_status =
+                            Some(PlacementResult::SkippedOff.status_label().to_string());
+                    }
+                    continue;
+                }
+                ResolvedMonitor::Device(device) => {
+                    let label = monitor_label(&monitors, &device);
+                    (device, label)
+                }
+            };
+
+            let result = monitor::try_place_window(
+                hwnd,
+                &target_device,
+                &facts,
+                &options,
+                placed,
+                now,
+                activity,
+            );
+
+            if let Some(window) = self.windows.get_mut(&identity) {
+                window.monitor_status = Some(result.status_label().to_string());
+                if matches!(
+                    result,
+                    PlacementResult::Moved | PlacementResult::AlreadyOnTarget
+                ) {
+                    window.monitor_placed = true;
+                }
+            }
+
+            if result == PlacementResult::Moved {
+                self.push_log(
+                    "info",
+                    format!(
+                        "Moved {title} to {}",
+                        target_label.unwrap_or_else(|| target_device.clone())
+                    ),
+                );
+            } else if let PlacementResult::Failed(reason) = result {
+                self.push_log(
+                    "error",
+                    format!("Monitor move failed for {title}: {reason}"),
+                );
+            }
+        }
     }
 
     fn note_armed_transitions(&mut self) {
@@ -906,17 +1007,49 @@ impl TrackedWindow {
             last_action_ok: self.last_action_ok,
             elevated_mismatch: self.facts.elevated == Some(true) && !current_elevated,
             learned,
-            profile: profile_snapshot(&profile),
+            monitor: GameMonitorSnapshot {
+                target: monitor_target_label(config, &self.exe, &self.wclass),
+                status: self.monitor_status.clone(),
+            },
+            profile: profile_snapshot(&profile, config),
         }
     }
 }
 
-fn profile_snapshot(profile: &TargetProfile) -> GameProfileSnapshot {
+fn profile_snapshot(profile: &TargetProfile, config: &AppConfig) -> GameProfileSnapshot {
     GameProfileSnapshot {
         action: profile.action.map(|action| action.label().to_string()),
         interval: profile.interval,
         key_sequence: profile.key_sequence.clone(),
+        monitor: profile
+            .monitor
+            .clone()
+            .or_else(|| profile_monitor_global_label(config)),
     }
+}
+
+fn profile_monitor_global_label(config: &AppConfig) -> Option<String> {
+    if config.monitor_placement {
+        Some("Use global".to_string())
+    } else {
+        None
+    }
+}
+
+fn monitor_target_label(config: &AppConfig, exe: &str, wclass: &str) -> Option<String> {
+    match config.resolve_monitor(exe, wclass) {
+        ResolvedMonitor::Off => None,
+        ResolvedMonitor::Device(device) => {
+            monitor::monitor_by_device(&device).map(|info| info.label)
+        }
+    }
+}
+
+fn monitor_label(monitors: &[MonitorInfo], device: &str) -> Option<String> {
+    monitors
+        .iter()
+        .find(|monitor| monitor.device == device)
+        .map(|monitor| monitor.label.clone())
 }
 
 fn effective_verdict(config: &AppConfig, detected: &DetectedWindow) -> Verdict {
