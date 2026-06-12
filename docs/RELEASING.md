@@ -15,9 +15,9 @@ OMNAFK is wired for GitHub Releases at `OMNHZN/OMNAFK`.
 3. Tag the release:
 
 ```powershell
-git tag v0.1.4
+git tag v0.1.5
 git push origin main
-git push origin v0.1.4
+git push origin v0.1.5
 ```
 
 The `Release` workflow builds the custom `dist/OMNAFK-Setup.exe` executable and

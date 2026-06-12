@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.5
+
+- Added clearer target details with detection reasons, adaptive action progress, monitor placement status, and holding state.
+- Improved the tray menu with live state, target counts, and next-tick status.
+- Added a quieter first-run setup area for choosing core defaults.
+- Refined activity log wording for marked targets, held ticks, resumed ticks, and sent actions.
+
 ## v0.1.4
 
 - Added monitor placement for marked games, including a global target monitor and per-target overrides.

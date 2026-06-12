@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.4",
+  "version": "0.1.5",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,7 +22,7 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.4",
+    "current_version": "0.1.5",
     "latest_version": "0.1.7",
     "latest_tag": "v0.1.7",
     "title": "OMNAFK v0.1.7",

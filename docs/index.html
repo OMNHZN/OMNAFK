@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OMNAFK - Awake when you aren't</title>
-<meta name="description" content="OMNAFK is a tray-first Windows utility with quiet game-window detection, adaptive keepalive actions, monitor placement, and stable GitHub updates.">
+<meta name="description" content="OMNAFK is a tray-first Windows utility with quiet game-window detection, adaptive keepalive actions, monitor placement, live target details, and stable GitHub updates.">
 <meta property="og:title" content="OMNAFK">
-<meta property="og:description" content="A tray-first Windows utility that marks game windows, learns safe per-game keepalive actions, places targets on your preferred monitor, and returns to dormancy.">
+<meta property="og:description" content="A tray-first Windows utility that marks game windows, explains target status, learns safe per-game keepalive actions, places targets on your preferred monitor, and returns to dormancy.">
 <meta property="og:image" content="https://omnhzn.github.io/OMNAFK/assets/flyout.png">
 <style>
   :root {
@@ -165,7 +165,7 @@
     <section class="wrap hero-copy">
       <h1>OMNAFK</h1>
       <p class="tag">Awake when you aren't.</p>
-      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, learns safe per-game keepalive actions, keeps them on the monitor you prefer, and returns to dormancy when there is nothing to do.</p>
+      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, explains what it sees, learns safe per-game keepalive actions, keeps targets on the monitor you prefer, and returns to dormancy when there is nothing to do.</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/OMNHZN/OMNAFK/releases/latest">Download Setup</a>
         <a class="button" href="https://github.com/OMNHZN/OMNAFK/issues/new?template=bug_report.yml">Report A Bug</a>
@@ -173,7 +173,7 @@
     </section>
     <div class="quick">
       <span>Windows 10 / 11</span>
-      <span>Stable v0.1.4</span>
+      <span>Stable v0.1.5</span>
       <a href="https://github.com/OMNHZN/OMNAFK/releases">GitHub Releases</a>
       <a href="https://github.com/OMNHZN/OMNAFK">Source Repository</a>
     </div>
@@ -186,7 +186,7 @@
       <div class="features">
         <article class="feature">
           <h3>SIGHTLINE</h3>
-          <p>No start button. OMNAFK marks game-like windows, wakes only when needed, and goes dormant when nothing is running.</p>
+          <p>No start button. OMNAFK marks game-like windows, shows why they were detected, and goes dormant when nothing is running.</p>
         </article>
         <article class="feature">
           <h3>QUIET INPUT</h3>
@@ -194,11 +194,11 @@
         </article>
         <article class="feature">
           <h3>ADAPTIVE ACTIONS</h3>
-          <p>OMNAFK can learn a small whitelist of keys you actually use per game, then draw keepalives from that profile.</p>
+          <p>OMNAFK can learn a small whitelist of keys you actually use per game, then show when that profile is ready.</p>
         </article>
         <article class="feature">
           <h3>MONITOR PLACEMENT</h3>
-          <p>Marked games can be moved to a preferred display, with per-target overrides when one window needs a different rule.</p>
+          <p>Marked games can be moved to a preferred display, with per-target overrides and visible placement status.</p>
         </article>
       </div>
     </div>
@@ -218,7 +218,7 @@
         <article class="shot">
           <img src="assets/app-sightline.png" alt="OMNAFK Sightline tab">
           <h3>SIGHTLINE</h3>
-          <p>See what OMNAFK sees, mark a target, ignore a window, pause a target, or send a test action.</p>
+          <p>See what OMNAFK sees, mark a target, ignore a window, pause a target, and review detection or placement details.</p>
         </article>
         <article class="shot">
           <img src="assets/app-settings.png" alt="OMNAFK Settings tab">
@@ -268,9 +268,9 @@
       <p class="eyebrow">CONTROL</p>
       <h2>Preferences stay yours.</h2>
       <div class="control-list">
-        <div><b>Target profiles</b>Choose a different action or interval for a specific marked window.</div>
-        <div><b>Monitor placement</b>Choose a global display, then override or disable movement for individual targets.</div>
-        <div><b>Adaptive actions</b>Let OMNAFK learn from a safe key whitelist, or reset a game's learned profile from Sightline.</div>
+        <div><b>Target profiles</b>Choose a different action or interval for a specific marked window, then check its details at any time.</div>
+        <div><b>Monitor placement</b>Choose a global display, then see whether each target is waiting, moved, or already on target.</div>
+        <div><b>Adaptive actions</b>Let OMNAFK learn from a safe key whitelist, then watch each game's learning progress from Sightline.</div>
         <div><b>Safety pauses</b>Hold on recent input, pause on battery, or use quiet hours.</div>
         <div><b>Stable updates</b>Check GitHub Releases from Settings and ignore an update when you want to wait.</div>
         <div><b>Diagnostics</b>Copy diagnostics or open a structured bug report when something needs attention.</div>
@@ -297,7 +297,7 @@
   </section>
 
   <footer>
-    <div class="wrap">V0.1.4 - MIT LICENSE - WINDOWS 10/11 - USE AT YOUR OWN DISCRETION</div>
+    <div class="wrap">V0.1.5 - MIT LICENSE - WINDOWS 10/11 - USE AT YOUR OWN DISCRETION</div>
   </footer>
 </body>
 </html>

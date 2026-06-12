@@ -34,10 +34,12 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 ## Highlights
 
 - Sightline detects fullscreen, borderless, and game-platform windows automatically.
+- Target details explain why a window was marked and show adaptive action progress.
 - Sends background keepalive input by default, avoiding focus theft.
 - Learns a small whitelist of per-game movement keys and can use those learned actions once it has enough samples.
 - Skips ticks while there is recent user input, so it stays out of your way while you are playing.
-- Can move marked games to a preferred monitor, with per-target overrides for special cases.
+- Can move marked games to a preferred monitor, with per-target overrides and placement status.
+- The tray menu shows current state, target counts, and the next scheduled tick at a glance.
 - Saves settings and target marks immediately.
 - Checks stable GitHub Releases and opens structured bug reports from Settings.
 
@@ -49,7 +51,7 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 The app is wired to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check GitHub Releases, open the latest download, open the repository, and start a structured bug report.
 
-Publishing a new stable version tag, such as `v0.1.4`, builds and attaches the custom setup executable to GitHub Releases.
+Publishing a new stable version tag, such as `v0.1.5`, builds and attaches the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
@@ -91,9 +93,9 @@ Local installer builds are written to `dist\OMNAFK-Setup.exe`.
 <summary>Release checklist</summary>
 
 ```powershell
-git tag v0.1.4
+git tag v0.1.5
 git push origin main
-git push origin v0.1.4
+git push origin v0.1.5
 ```
 
 GitHub Actions builds the Windows installer and publishes it to GitHub Releases. See [docs/RELEASING.md](docs/RELEASING.md) for the full release checklist.
