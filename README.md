@@ -41,7 +41,7 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Can move marked games to a preferred monitor, with per-target overrides and placement status.
 - The tray menu shows current state, target counts, and the next scheduled tick at a glance.
 - Saves settings and target marks immediately.
-- Checks stable GitHub Releases and opens structured bug reports from Settings.
+- Checks stable releases and opens bug reports from Settings.
 
 ## Install
 
@@ -49,9 +49,9 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 ## Updates And Feedback
 
-The app is wired to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check GitHub Releases, open the latest download, open the repository, and start a structured bug report.
+The app is connected to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check releases, open the latest download, open the repository, and start a bug report.
 
-Publishing a new stable version tag, such as `v0.1.5`, builds and attaches the custom setup executable to GitHub Releases.
+New stable version tags, such as `v0.1.5`, build and attach the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
