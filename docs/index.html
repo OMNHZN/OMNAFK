@@ -120,6 +120,14 @@
   .flow-step b { display: block; margin-bottom: 16px; color: var(--faint); font: 700 11px var(--mono); }
   .flow-step h3 { margin: 0 0 10px; font: 700 13px var(--mono); }
   .flow-step p { margin: 0; color: var(--dim); font-size: 14px; line-height: 1.55; }
+  .guide-grid { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .guide-panel { background: var(--surface); padding: 24px; }
+  .guide-panel h3 { margin: 0 0 14px; font: 700 13px var(--mono); letter-spacing: 0; }
+  .guide-panel p { margin: 0 0 14px; color: var(--dim); font-size: 14px; line-height: 1.6; }
+  .guide-panel p:last-child { margin-bottom: 0; }
+  .guide-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .guide-list li { color: var(--dim); font-size: 14px; line-height: 1.6; }
+  .guide-list b { color: var(--text); font: 700 12px var(--mono); margin-right: 6px; }
   .control-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
   .control-list div { background: var(--surface); padding: 18px 20px; color: var(--dim); line-height: 1.55; font-size: 14px; }
   .control-list b { display: block; color: var(--text); font: 700 12px var(--mono); margin-bottom: 6px; }
@@ -137,7 +145,7 @@
         #000;
     }
     .hero-copy { padding-top: 430px; padding-bottom: 62px; }
-    .features, .showcase, .quick, .app-grid, .flow, .control-list { grid-template-columns: 1fr; }
+    .features, .showcase, .quick, .app-grid, .flow, .guide-grid, .control-list { grid-template-columns: 1fr; }
     .quick a, .quick span { border-right: 0; border-bottom: 1px solid var(--line); justify-content: flex-start; }
     .quick :last-child { border-bottom: 0; }
     .nav-links { gap: 12px; font-size: 11px; }
@@ -158,6 +166,7 @@
       <div class="nav-links">
         <a href="#install">Install</a>
         <a href="#app">App</a>
+        <a href="#guide">Guide</a>
         <a href="#behavior">Behavior</a>
         <a href="https://github.com/OMNHZN/OMNAFK">GitHub</a>
       </div>
@@ -229,6 +238,32 @@
           <img src="assets/app-about.png" alt="OMNAFK About tab">
           <h3>ABOUT</h3>
           <p>Check for updates, open the repository, report a bug, copy diagnostics, and review license details.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="guide">
+    <div class="wrap">
+      <p class="eyebrow">HELP</p>
+      <h2>New to OMNAFK? Start here.</h2>
+      <p class="intro">You do not need to tune everything at once. Install it, let Sightline watch your windows, then adjust only the parts that matter to your setup.</p>
+      <div class="guide-grid">
+        <article class="guide-panel">
+          <h3>FIRST RUN</h3>
+          <p>Leave OMNAFK in the tray and open the flyout when you want to check what it sees. If a game appears in Sightline, mark it as a game. If a normal app appears there, ignore it.</p>
+          <p>The status bar tells you whether OMNAFK is dormant, watching, holding, or ready for the next tick.</p>
+        </article>
+        <article class="guide-panel">
+          <h3>COMMON QUESTIONS</h3>
+          <ul class="guide-list">
+            <li><b>Nothing shows up?</b> Open the game window, then press Rescan in Sightline.</li>
+            <li><b>Wrong window marked?</b> Set it to ignored. OMNAFK remembers your choice.</li>
+            <li><b>Do not want focus stolen?</b> Keep Send without focus on. That is the default.</li>
+            <li><b>Playing right now?</b> Hold while I'm playing pauses sends after recent input.</li>
+            <li><b>Using more than one monitor?</b> Choose monitor placement in General, then override single targets from Sightline when needed.</li>
+            <li><b>Need help?</b> Use Bug report from About so the report opens with the right template.</li>
+          </ul>
         </article>
       </div>
     </div>
