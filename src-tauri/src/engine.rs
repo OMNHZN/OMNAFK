@@ -1,4 +1,5 @@
 use crate::{
+    community::{self, CommunityGameSnapshot, SharedCommunity},
     config::{AppConfig, OverrideVerdict, ResolvedAction, ResolvedMonitor, TargetProfile},
     detector::{self, DetectedWindow, Verdict, WindowFacts},
     gpu::PdhGpuProbe,
@@ -90,6 +91,8 @@ pub struct GameSnapshot {
     pub consecutive_failures: u32,
     pub success_rate: Option<u8>,
     pub primary_keepalive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub community: Option<CommunityGameSnapshot>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +117,7 @@ pub struct Engine {
     worker: Mutex<Option<JoinHandle<()>>>,
     sampler: Mutex<Option<JoinHandle<()>>>,
     gpu: Mutex<PdhGpuProbe>,
+    community: SharedCommunity,
 }
 
 #[derive(Debug)]
@@ -169,6 +173,14 @@ impl Engine {
     }
 
     pub fn with_stats(config: AppConfig, persisted: PersistedStats) -> SharedEngine {
+        Self::with_community(config, persisted, community::shared_runtime())
+    }
+
+    pub fn with_community(
+        config: AppConfig,
+        persisted: PersistedStats,
+        community: SharedCommunity,
+    ) -> SharedEngine {
         Arc::new(Self {
             inner: RwLock::new(EngineInner {
                 config,
@@ -193,7 +205,12 @@ impl Engine {
             worker: Mutex::new(None),
             sampler: Mutex::new(None),
             gpu: Mutex::new(PdhGpuProbe::default()),
+            community,
         })
+    }
+
+    pub fn community(&self) -> &SharedCommunity {
+        &self.community
     }
 
     pub fn start(self: &Arc<Self>) {
@@ -420,19 +437,26 @@ impl Engine {
             }
         }
 
-        let (sensitivity, always_mark) = {
+        let (sensitivity, always_mark, supplement) = {
             let inner = self.inner.read();
+            let supplement = if inner.config.community_intelligence {
+                Some(self.community.read().supplement.clone())
+            } else {
+                None
+            };
             (
                 inner.config.sensitivity,
                 inner.config.always_mark_exes.clone(),
+                supplement,
             )
         };
         let gpu = self.gpu.lock();
-        let detected = detector::scan_windows(sensitivity, &*gpu, &always_mark);
+        let detected =
+            detector::scan_windows(sensitivity, &*gpu, &always_mark, supplement.as_ref());
         drop(gpu);
         {
             let mut inner = self.inner.write();
-            inner.apply_detection(detected, Instant::now());
+            inner.apply_detection(detected, Instant::now(), &self.community);
         }
         self.persist_stats(false);
     }
@@ -457,6 +481,7 @@ impl Engine {
 
     pub fn snapshot(&self) -> EngineSnapshot {
         let inner = self.inner.read();
+        let community_rt = self.community.read();
         let now = Instant::now();
         let mut games: Vec<_> = inner
             .windows
@@ -477,12 +502,23 @@ impl Engine {
                     )
                 });
                 let success_rate = inner.stats.game_success_rate(identity);
+                let exe_key = window.exe.to_ascii_lowercase();
+                let community = if inner.config.community_intelligence {
+                    community::snapshot_for_exe(
+                        &community_rt,
+                        &window.exe,
+                        community_rt.applied_exes.contains(&exe_key),
+                    )
+                } else {
+                    None
+                };
                 window.snapshot(
                     &inner.config,
                     now,
                     inner.current_elevated,
                     learned,
                     success_rate,
+                    community,
                 )
             })
             .collect();
@@ -589,6 +625,7 @@ impl Engine {
                 wclass: &wclass_c,
                 base: &base_action,
                 health: &health,
+                community_entry: None,
             },
             &mut thread_rng(),
         );
@@ -714,7 +751,12 @@ impl EngineInner {
         }
     }
 
-    fn apply_detection(&mut self, detected: Vec<DetectedWindow>, now: Instant) {
+    fn apply_detection(
+        &mut self,
+        detected: Vec<DetectedWindow>,
+        now: Instant,
+        community: &SharedCommunity,
+    ) {
         let activity = Win32ActivityProbe;
         let mut rng = thread_rng();
         let elapsed = now
@@ -727,6 +769,9 @@ impl EngineInner {
         for detected in detected {
             let identity = identity_key(&detected.facts.exe, &detected.facts.wclass);
             seen.insert(identity.clone());
+            let is_new = !self.windows.contains_key(&identity);
+            let exe_name = detected.facts.exe.clone();
+            let wclass_name = detected.facts.wclass.clone();
             let effective = effective_verdict(&self.config, &detected);
             let overridden = self
                 .config
@@ -777,6 +822,21 @@ impl EngineInner {
                     primary_keepalive: true,
                 });
 
+            if is_new && self.config.community_intelligence {
+                let mut rt = community.write();
+                if community::try_auto_apply_for_window(
+                    &mut self.config,
+                    &mut rt,
+                    &exe_name,
+                    &wclass_name,
+                ) {
+                    self.push_log("info", format!("Community profile applied for {exe_name}"));
+                    if let Err(error) = crate::config::save(&self.config) {
+                        tracing::warn!("Couldn't save community profile: {error}");
+                    }
+                }
+            }
+
             if effective == Verdict::Game {
                 self.stats.note_seen_today(&identity);
                 if self.config.burst_detection {
@@ -806,7 +866,7 @@ impl EngineInner {
         self.assign_primary_keepalives();
         self.note_armed_transitions();
         self.place_windows(now, &activity);
-        self.drive_keepalives(now, elapsed, &activity, &mut rng);
+        self.drive_keepalives(now, elapsed, &activity, &mut rng, community);
     }
 
     fn assign_primary_keepalives(&mut self) {
@@ -911,8 +971,14 @@ impl EngineInner {
                 ) {
                     window.monitor_placed = true;
                     window.monitor_move_failures = 0;
+                    if self.config.community_intelligence {
+                        community::record_monitor_result(&exe, true);
+                    }
                 } else if matches!(result, PlacementResult::Failed(_)) {
                     window.monitor_move_failures = window.monitor_move_failures.saturating_add(1);
+                    if self.config.community_intelligence {
+                        community::record_monitor_result(&exe, false);
+                    }
                     if window.facts.fullscreen && window.monitor_move_failures >= FAILURE_THRESHOLD
                     {
                         window.monitor_status = Some("Try borderless/windowed".to_string());
@@ -1013,6 +1079,7 @@ impl EngineInner {
         elapsed: u64,
         activity: &Win32ActivityProbe,
         rng: &mut impl rand::Rng,
+        community: &SharedCommunity,
     ) {
         if self.config.suspended || self.snooze_until.is_some() {
             self.status = EngineStatus::Suspended;
@@ -1070,6 +1137,11 @@ impl EngineInner {
             let hwnd = window.hwnd;
             let base_action = KeepaliveOptions::from_config(&self.config, &exe, &wclass).action;
             let health = window.health.clone();
+            let community_entry = if self.config.community_intelligence {
+                community::game_entry(&community.read(), &exe).cloned()
+            } else {
+                None
+            };
 
             let (action, send_without_focus, label, log_label) = resolve_keepalive_action(
                 KeepaliveResolveContext {
@@ -1080,13 +1152,18 @@ impl EngineInner {
                     wclass: &wclass,
                     base: &base_action,
                     health: &health,
+                    community_entry: community_entry.as_ref(),
                 },
                 rng,
             );
             let mut options = KeepaliveOptions::from_config(&self.config, &exe, &wclass);
             options.action = action;
             options.send_without_focus = send_without_focus;
-            let target = KeepaliveTarget { hwnd, exe, wclass };
+            let target = KeepaliveTarget {
+                hwnd,
+                exe: exe.clone(),
+                wclass,
+            };
 
             if gate.is_none() && elapsed > 0 {
                 self.stats.note_kept(&identity, &title, elapsed);
@@ -1134,6 +1211,27 @@ impl EngineInner {
                             if self.config.adaptive_learn_actions {
                                 self.stats.note_learned_action_success(&identity, &label);
                             }
+                            if self.config.community_intelligence {
+                                let top_keys = self
+                                    .stats
+                                    .learned_profile(&identity)
+                                    .map(|profile| {
+                                        profile
+                                            .top()
+                                            .into_iter()
+                                            .take(2)
+                                            .map(|entry| entry.key)
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
+                                community::record_keepalive(
+                                    &exe,
+                                    &label,
+                                    true,
+                                    send_without_focus,
+                                    &top_keys,
+                                );
+                            }
                             self.last_error = None;
                             log_entries
                                 .push(("action".into(), format!("Sent {log_label} to {title}")));
@@ -1151,6 +1249,15 @@ impl EngineInner {
                             }
                             self.stats
                                 .note_action_result(&identity, &title, &label, false);
+                            if self.config.community_intelligence {
+                                community::record_keepalive(
+                                    &exe,
+                                    &label,
+                                    false,
+                                    send_without_focus,
+                                    &[],
+                                );
+                            }
                             self.last_error = Some(error.to_string());
                             log_entries.push(("error".into(), error.to_string()));
                             if notify_errors {
@@ -1208,6 +1315,7 @@ impl TrackedWindow {
         current_elevated: bool,
         learned: Option<LearnedSnapshot>,
         success_rate: Option<u8>,
+        community: Option<CommunityGameSnapshot>,
     ) -> GameSnapshot {
         let profile = config
             .profile_for(&self.exe, &self.wclass)
@@ -1248,6 +1356,7 @@ impl TrackedWindow {
             consecutive_failures: self.health.consecutive_failures,
             success_rate,
             primary_keepalive: self.primary_keepalive,
+            community,
         }
     }
 }
@@ -1260,6 +1369,7 @@ struct KeepaliveResolveContext<'a> {
     wclass: &'a str,
     base: &'a ResolvedAction,
     health: &'a KeepaliveHealth,
+    community_entry: Option<&'a community::GameEntry>,
 }
 
 fn resolve_keepalive_action(
@@ -1274,8 +1384,16 @@ fn resolve_keepalive_action(
         wclass,
         base,
         health,
+        community_entry,
     } = ctx;
-    let (mut action, send_without_focus) = health.apply_to_options(base, config.send_without_focus);
+    let mut effective_health = health.clone();
+    if let Some(entry) = community_entry {
+        if let Some(tier) = community::preferred_fallback_tier(entry, health.consecutive_failures) {
+            effective_health.fallback_tier = tier;
+        }
+    }
+    let (mut action, send_without_focus) =
+        effective_health.apply_to_options(base, config.send_without_focus);
 
     if config.adaptive_enabled(exe, wclass)
         && config

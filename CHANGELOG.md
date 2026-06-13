@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.8
+
+- Added opt-in community game profiles for shared detection hints and keepalive settings.
+- Kept community profile changes behind the user toggle and saved auto-applied profiles immediately.
+- Tightened shared-profile safeguards so remote data cannot disable quiet background sending or rewrite monitor preferences.
+- Added clearer community documentation and status details for target rows.
+
 ## v0.1.7
 
 - Reorganized the General tab around setup, timing, action, and safety controls.

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "updated": "2026-06-12",
+  "ingest_url": null,
+  "games": {
+    "robloxplayerbeta.exe": {
+      "action": "Space tap",
+      "interval": 540,
+      "send_without_focus": true,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.95,
+      "reports": 100,
+      "top_keys": ["SPACE", "W"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "monitor_style": "Preserve size",
+      "monitor_note": "Borderless fullscreen works best for monitor placement.",
+      "status": "stable"
+    },
+    "robloxplayer.exe": {
+      "action": "Space tap",
+      "interval": 540,
+      "confidence": 0.9,
+      "reports": 50,
+      "fallback_order": ["FocusFlick", "CameraNudge"]
+    }
+  },
+  "detection": {
+    "known_exes": [
+      "minecraft.windows.exe",
+      "javaw.exe",
+      "league of legends.exe"
+    ],
+    "path_patterns": [
+      "steamapps\\common",
+      "epic games\\",
+      "riot games\\"
+    ],
+    "negative_exes": [
+      "discord.exe",
+      "spotify.exe"
+    ],
+    "negative_classes": [
+      "shell_traywnd",
+      "progman"
+    ]
+  }
+}

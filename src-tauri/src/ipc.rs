@@ -59,6 +59,7 @@ pub struct ConfigPayload {
     pub adaptive_learn_actions: bool,
     pub burst_detection: bool,
     pub headless: bool,
+    pub community_intelligence: bool,
     pub always_mark_exes: Vec<String>,
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
@@ -135,6 +136,7 @@ impl From<&AppConfig> for ConfigPayload {
             adaptive_learn_actions: config.adaptive_learn_actions,
             burst_detection: config.burst_detection,
             headless: config.headless,
+            community_intelligence: config.community_intelligence,
             always_mark_exes: config.always_mark_exes.clone(),
             key_sequence: config.key_sequence.clone(),
             send_without_focus: config.send_without_focus,
@@ -914,6 +916,12 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
         "adaptive_learn_actions" => config.adaptive_learn_actions = bool_value(value, key)?,
         "burst_detection" => config.burst_detection = bool_value(value, key)?,
         "headless" => config.headless = bool_value(value, key)?,
+        "community_intelligence" => {
+            config.community_intelligence = bool_value(value, key)?;
+            if config.community_intelligence {
+                crate::community::ensure_client_id(config);
+            }
+        }
         "adaptive_min_samples" => {
             let samples = value.as_u64().ok_or_else(|| {
                 "Couldn't set adaptive sample threshold - choose a number to fix this.".to_string()

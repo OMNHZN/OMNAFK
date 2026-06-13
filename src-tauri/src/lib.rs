@@ -2,6 +2,7 @@ use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_notification::NotificationExt;
 
+pub mod community;
 pub mod config;
 pub mod detector;
 pub mod engine;
@@ -38,13 +39,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let config = match config::load() {
+            let mut config = match config::load() {
                 Ok(config) => config,
                 Err(error) => {
                     tracing::warn!("{error}");
                     config::AppConfig::default()
                 }
             };
+            let needs_client =
+                config.community_intelligence && config.community_client_id.is_empty();
+            if needs_client {
+                community::ensure_client_id(&mut config);
+                if let Err(error) = config::save(&config) {
+                    tracing::warn!("{error}");
+                }
+            }
+            let community = community::shared_runtime();
             let show_on_launch = config.show_on_launch && !config.headless;
             let first_run_notified = config.first_run_notified;
             let notifications = config.notifications;
@@ -56,8 +66,10 @@ pub fn run() {
                 update_prompt_mode: config.update_prompt_mode,
                 notifications,
             };
-            let engine = engine::Engine::with_stats(config, stats::load_persisted());
+            let engine =
+                engine::Engine::with_community(config, stats::load_persisted(), community.clone());
             engine.start();
+            community::spawn_sync_loop(community, engine.clone());
             app.manage(engine.clone());
             ipc::spawn_state_pump(app.handle().clone(), engine);
             flyout::setup_window_events(

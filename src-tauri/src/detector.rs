@@ -78,6 +78,7 @@ pub fn scan_windows(
     sensitivity: Sensitivity,
     gpu: &dyn GpuUsageProbe,
     always_mark_exes: &[String],
+    supplement: Option<&crate::community::DetectionSupplement>,
 ) -> Vec<DetectedWindow> {
     let mut hwnds = Vec::new();
     unsafe {
@@ -89,7 +90,7 @@ pub fn scan_windows(
 
     hwnds
         .into_iter()
-        .filter_map(|hwnd| gather_window_facts(hwnd, gpu, always_mark_exes))
+        .filter_map(|hwnd| gather_window_facts(hwnd, gpu, always_mark_exes, supplement))
         .map(|seed| {
             let score = score(&seed.facts);
             let verdict = verdict_for_score(score, sensitivity);
@@ -186,6 +187,7 @@ fn gather_window_facts(
     hwnd: HWND,
     gpu: &dyn GpuUsageProbe,
     always_mark_exes: &[String],
+    supplement: Option<&crate::community::DetectionSupplement>,
 ) -> Option<DetectedWindowSeed> {
     let raw_title = window_text(hwnd);
     let wclass = window_class(hwnd)?;
@@ -198,7 +200,7 @@ fn gather_window_facts(
         .unwrap_or_else(|| format!("pid-{pid}"));
     let platform_path = path.as_deref().map(is_game_platform_path).unwrap_or(false);
     let (fullscreen, borderless) = window_screen_coverage(hwnd).unwrap_or((false, false));
-    let known_game = is_known_game_window(&raw_title, &exe, &wclass, path.as_deref())
+    let known_game = is_known_game_window(&raw_title, &exe, &wclass, path.as_deref(), supplement)
         || always_mark_exes
             .iter()
             .any(|entry| entry.trim().eq_ignore_ascii_case(&exe));
@@ -209,7 +211,7 @@ fn gather_window_facts(
 
     let modules = process_modules(pid);
     let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
-    let negative_class = !known_game && is_negative_window(&exe, &wclass);
+    let negative_class = !known_game && is_negative_window(&exe, &wclass, supplement);
     let gpu_active = gpu.usage_for_pid(pid).is_some();
     let title = if raw_title.is_empty() {
         fallback_title(&exe, path.as_deref())
@@ -478,11 +480,26 @@ fn is_game_platform_path(path: &str) -> bool {
     .any(|needle| path.contains(needle))
 }
 
-fn is_known_game_window(title: &str, exe: &str, wclass: &str, path: Option<&str>) -> bool {
+fn is_known_game_window(
+    title: &str,
+    exe: &str,
+    wclass: &str,
+    path: Option<&str>,
+    supplement: Option<&crate::community::DetectionSupplement>,
+) -> bool {
     let title = title.to_ascii_lowercase();
     let exe = exe.to_ascii_lowercase();
     let wclass = wclass.to_ascii_lowercase();
     let path = path.unwrap_or_default().to_ascii_lowercase();
+
+    if let Some(sup) = supplement {
+        if sup.known_exes.contains(&exe) {
+            return true;
+        }
+        if sup.path_patterns.iter().any(|needle| path.contains(needle)) {
+            return true;
+        }
+    }
 
     if exe == "robloxplayerbeta.exe" || exe == "robloxplayer.exe" {
         return true;
@@ -522,9 +539,26 @@ fn is_known_game_window(title: &str, exe: &str, wclass: &str, path: Option<&str>
         || wclass.contains("roblox")
 }
 
-fn is_negative_window(exe: &str, wclass: &str) -> bool {
+fn is_negative_window(
+    exe: &str,
+    wclass: &str,
+    supplement: Option<&crate::community::DetectionSupplement>,
+) -> bool {
     let exe = exe.to_ascii_lowercase();
     let wclass = wclass.to_ascii_lowercase();
+
+    if let Some(sup) = supplement {
+        if sup.negative_exes.contains(&exe) {
+            return true;
+        }
+        if sup
+            .negative_classes
+            .iter()
+            .any(|needle| wclass.contains(needle))
+        {
+            return true;
+        }
+    }
 
     let negative_exe = [
         "chrome.exe",
@@ -659,6 +693,7 @@ mod tests {
             "",
             "RobloxPlayerBeta.exe",
             "WINDOWSCLIENT",
+            None,
             None
         ));
         assert_eq!(score(&facts), 80);
@@ -691,7 +726,8 @@ mod tests {
             "WINDOWSCLIENT",
             Some(
                 r"C:\Users\Player\AppData\Local\Bloxstrap\Versions\version-abc\RobloxPlayerBeta.exe"
-            )
+            ),
+            None
         ));
     }
 
@@ -701,7 +737,8 @@ mod tests {
             "Roblox",
             "Windows10Universal.exe",
             "ApplicationFrameWindow",
-            Some(r"C:\Program Files\WindowsApps\ROBLOXCORPORATION.ROBLOX")
+            Some(r"C:\Program Files\WindowsApps\ROBLOXCORPORATION.ROBLOX"),
+            None
         ));
     }
 
@@ -711,11 +748,13 @@ mod tests {
             "Settings",
             "SystemSettings.exe",
             "ApplicationFrameWindow",
+            None,
             None
         ));
         assert!(is_negative_window(
             "SystemSettings.exe",
-            "ApplicationFrameWindow"
+            "ApplicationFrameWindow",
+            None
         ));
     }
 }

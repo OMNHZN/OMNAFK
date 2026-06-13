@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.7",
+  "version": "0.1.8",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,16 +22,16 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.7",
-    "latest_version": "0.1.8",
-    "latest_tag": "v0.1.8",
-    "title": "OMNAFK v0.1.8",
-    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.8",
+    "current_version": "0.1.8",
+    "latest_version": "0.1.9",
+    "latest_tag": "v0.1.9",
+    "title": "OMNAFK v0.1.9",
+    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.9",
     "published_at": "2026-06-10T20:00:00Z",
     "prerelease": false,
     "update_available": true,
     "asset_name": "OMNAFK-Setup.exe",
-    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.8/OMNAFK-Setup.exe",
+    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.9/OMNAFK-Setup.exe",
     "notes_excerpt": "Short release notes excerpt."
   } | null,
   "games": [
@@ -68,6 +68,13 @@ All payloads are JSON (serde). Times are integer seconds.
       "consecutive_failures": 0,
       "success_rate": 92 | null,
       "primary_keepalive": true,
+      "community": {
+        "label": "Community · Space tap · 95%",
+        "confidence": 0.95,
+        "reports": 100,
+        "degraded": null,
+        "applied": true
+      } | null,
       "profile": {
         "action": "W tap" | null,
         "interval": 60 | null,
@@ -105,6 +112,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "adaptive_learn_actions": true,
     "burst_detection": true,
     "headless": false,
+    "community_intelligence": false,
     "always_mark_exes": ["mygame.exe"],
     "monitor_placement": false,
     "monitor_device": null,
@@ -135,7 +143,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "github_repo": "OMNHZN/OMNAFK",
     "update_channel": "Stable",
     "check_updates_on_launch": false,
-    "ignored_update_tag": "v0.1.7" | null,
+    "ignored_update_tag": "v0.1.8" | null,
     "pinned": false,
     "last_tab": "general" | "targets" | "stats" | "settings" | "about",
     "settings_interface_collapsed": true,

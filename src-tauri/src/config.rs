@@ -271,6 +271,11 @@ pub struct AppConfig {
     pub headless: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub always_mark_exes: Vec<String>,
+    pub community_intelligence: bool,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub community_client_id: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub community_dismissed_exes: Vec<String>,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
@@ -378,6 +383,9 @@ impl Default for AppConfig {
             burst_detection: true,
             headless: false,
             always_mark_exes: Vec::new(),
+            community_intelligence: false,
+            community_client_id: String::new(),
+            community_dismissed_exes: Vec::new(),
             suspended: false,
             pin_position: None,
             first_run_notified: false,
