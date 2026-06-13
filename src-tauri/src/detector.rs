@@ -40,6 +40,7 @@ pub struct WindowFacts {
     pub platform_path: bool,
     pub known_game: bool,
     pub negative_class: bool,
+    pub gpu_active: bool,
     /// The target process runs elevated (None when we couldn't query it).
     pub elevated: Option<bool>,
 }
@@ -73,7 +74,11 @@ impl GpuUsageProbe for NoGpuUsageProbe {
     }
 }
 
-pub fn scan_windows(sensitivity: Sensitivity, gpu: &dyn GpuUsageProbe) -> Vec<DetectedWindow> {
+pub fn scan_windows(
+    sensitivity: Sensitivity,
+    gpu: &dyn GpuUsageProbe,
+    always_mark_exes: &[String],
+) -> Vec<DetectedWindow> {
     let mut hwnds = Vec::new();
     unsafe {
         let _ = EnumWindows(
@@ -84,7 +89,7 @@ pub fn scan_windows(sensitivity: Sensitivity, gpu: &dyn GpuUsageProbe) -> Vec<De
 
     hwnds
         .into_iter()
-        .filter_map(|hwnd| gather_window_facts(hwnd, gpu))
+        .filter_map(|hwnd| gather_window_facts(hwnd, gpu, always_mark_exes))
         .map(|seed| {
             let score = score(&seed.facts);
             let verdict = verdict_for_score(score, sensitivity);
@@ -115,6 +120,9 @@ pub fn score(facts: &WindowFacts) -> i32 {
     }
     if facts.known_game {
         score += 80;
+    }
+    if facts.gpu_active {
+        score += 20;
     }
     if facts.negative_class {
         score -= 60;
@@ -174,7 +182,11 @@ unsafe fn is_candidate_window(hwnd: HWND) -> bool {
     true
 }
 
-fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWindowSeed> {
+fn gather_window_facts(
+    hwnd: HWND,
+    gpu: &dyn GpuUsageProbe,
+    always_mark_exes: &[String],
+) -> Option<DetectedWindowSeed> {
     let raw_title = window_text(hwnd);
     let wclass = window_class(hwnd)?;
     let pid = window_pid(hwnd)?;
@@ -186,7 +198,10 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
         .unwrap_or_else(|| format!("pid-{pid}"));
     let platform_path = path.as_deref().map(is_game_platform_path).unwrap_or(false);
     let (fullscreen, borderless) = window_screen_coverage(hwnd).unwrap_or((false, false));
-    let known_game = is_known_game_window(&raw_title, &exe, &wclass, path.as_deref());
+    let known_game = is_known_game_window(&raw_title, &exe, &wclass, path.as_deref())
+        || always_mark_exes
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(&exe));
 
     if raw_title.is_empty() && !platform_path && !known_game {
         return None;
@@ -195,7 +210,7 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
     let modules = process_modules(pid);
     let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
     let negative_class = !known_game && is_negative_window(&exe, &wclass);
-    let _gpu_usage = gpu.usage_for_pid(pid);
+    let gpu_active = gpu.usage_for_pid(pid).is_some();
     let title = if raw_title.is_empty() {
         fallback_title(&exe, path.as_deref())
     } else {
@@ -215,6 +230,7 @@ fn gather_window_facts(hwnd: HWND, gpu: &dyn GpuUsageProbe) -> Option<DetectedWi
             platform_path,
             known_game,
             negative_class,
+            gpu_active,
             elevated: process_elevated(pid),
         },
     })
@@ -472,6 +488,27 @@ fn is_known_game_window(title: &str, exe: &str, wclass: &str, path: Option<&str>
         return true;
     }
 
+    const KNOWN_EXES: &[&str] = &[
+        "javaw.exe",
+        "minecraft.windows.exe",
+        "minecraftlauncher.exe",
+        "fortniteclient-win64-shipping.exe",
+        "valorant-win64-shipping.exe",
+        "cs2.exe",
+        "csgo.exe",
+        "gta5.exe",
+        "eldenring.exe",
+        "darksoulsiii.exe",
+        "rocketleague.exe",
+        "amongus.exe",
+        "fallguys_client_game.exe",
+        "destiny2.exe",
+        "overwatch.exe",
+    ];
+    if KNOWN_EXES.contains(&exe.as_str()) {
+        return true;
+    }
+
     if exe == "windows10universal.exe"
         && (title.contains("roblox") || path.contains("roblox") || wclass.contains("roblox"))
     {
@@ -534,6 +571,7 @@ mod tests {
             platform_path: false,
             known_game: false,
             negative_class: false,
+            gpu_active: false,
             elevated: None,
         }
     }

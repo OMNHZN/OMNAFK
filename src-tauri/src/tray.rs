@@ -234,7 +234,21 @@ fn menu_summaries(snapshot: &EngineSnapshot) -> (String, String, String) {
         EngineStatus::Holding => "Next tick: held".to_string(),
         _ => "Next tick: --".to_string(),
     };
-    let targets = format!("Targets: {} active, {} ignored", active.len(), ignored);
+    let mut targets = format!("Targets: {} active, {} ignored", active.len(), ignored);
+    if snapshot.config.monitor_placement {
+        let placed = active
+            .iter()
+            .filter(|game| {
+                game.monitor
+                    .status
+                    .as_deref()
+                    .is_some_and(|s| s.contains("target") || s == "Moved")
+            })
+            .count();
+        if placed > 0 {
+            targets.push_str(&format!(", {placed} on monitor"));
+        }
+    }
     (
         format!("State: {}", state.trim_start_matches("OMNAFK - ")),
         next,

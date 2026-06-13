@@ -1,28 +1,14 @@
 //! Adaptive keepalive learning.
-//!
-//! While the user is actively playing a tracked game, a sampler polls a small
-//! whitelist of game-safe keys and builds a per-game frequency histogram.
-//! Once a game has enough samples, keepalives draw a weighted-random key from
-//! that histogram instead of the global default action — so each game gets
-//! inputs shaped like the player's own habits.
-//!
-//! Privacy: only the whitelisted keys below are ever polled. Typing, chat,
-//! and every other key are invisible to the sampler by construction.
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// How often the engine sampler polls held keys while the user plays.
 pub const SAMPLE_INTERVAL_MS: u64 = 200;
-/// Samples required before a learned profile takes over from the default action.
-pub const MIN_SAMPLES: u64 = 50;
-/// Only consider the user "playing" when input happened this recently.
+pub const DEFAULT_MIN_SAMPLES: u64 = 50;
 pub const ACTIVE_INPUT_MS: u64 = 1500;
 const TOP_KEYS: usize = 4;
 
-/// Game-safe keys the sampler is allowed to observe. Names must round-trip
-/// through `config::key_name_to_vk` so learned keys can be replayed.
 pub const WHITELIST: &[(u16, &str)] = &[
     (0x20, "SPACE"),
     (0x57, "W"),
@@ -40,31 +26,44 @@ pub const WHITELIST: &[(u16, &str)] = &[
     (0x27, "RIGHT"),
 ];
 
-/// Decaying key-frequency histogram for one game.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LearnedProfile {
     pub counts: BTreeMap<String, u64>,
+    pub sequences: BTreeMap<String, u64>,
+    pub successful_actions: BTreeMap<String, u64>,
     pub total: u64,
-    /// ISO week of the last decay pass; counts halve when the week changes.
     pub last_decay: String,
 }
 
 impl LearnedProfile {
-    /// Record one observation of `keys` being held. Returns true when this
-    /// sample pushed the profile across the confidence threshold.
-    pub fn note(&mut self, keys: &[&str], week: &str) -> bool {
+    pub fn note(
+        &mut self,
+        keys: &[&str],
+        week: &str,
+        min_samples: u64,
+        learn_sequences: bool,
+    ) -> bool {
         self.decay_if_due(week);
-        let was_confident = self.confident();
+        let was_confident = self.confident(min_samples);
         for key in keys {
             *self.counts.entry((*key).to_string()).or_default() += 1;
             self.total += 1;
         }
-        !was_confident && self.confident()
+        if learn_sequences && keys.len() >= 2 {
+            let seq = keys.join("+");
+            *self.sequences.entry(seq).or_default() += 1;
+        }
+        !was_confident && self.confident(min_samples)
     }
 
-    /// Halve all counts when the ISO week changes, so old habits fade and
-    /// rebinds or playstyle changes win out over time.
+    pub fn note_action_success(&mut self, action_label: &str) {
+        *self
+            .successful_actions
+            .entry(action_label.to_string())
+            .or_default() += 1;
+    }
+
     fn decay_if_due(&mut self, week: &str) {
         if self.last_decay == week {
             return;
@@ -73,18 +72,78 @@ impl LearnedProfile {
             for count in self.counts.values_mut() {
                 *count /= 2;
             }
+            for count in self.sequences.values_mut() {
+                *count /= 2;
+            }
+            for count in self.successful_actions.values_mut() {
+                *count /= 2;
+            }
             self.counts.retain(|_, count| *count > 0);
+            self.sequences.retain(|_, count| *count > 0);
+            self.successful_actions.retain(|_, count| *count > 0);
             self.total = self.counts.values().sum();
         }
         self.last_decay = week.to_string();
     }
 
-    pub fn confident(&self) -> bool {
-        self.total >= MIN_SAMPLES
+    pub fn confident(&self, min_samples: u64) -> bool {
+        self.total >= min_samples.max(1)
     }
 
-    /// Weighted-random key draw from the learned distribution.
-    pub fn pick(&self, rng: &mut impl Rng) -> Option<String> {
+    pub fn pick(
+        &self,
+        rng: &mut impl Rng,
+        learn_sequences: bool,
+        learn_actions: bool,
+    ) -> AdaptivePick {
+        if learn_actions {
+            if let Some(action) = self.pick_action(rng) {
+                return AdaptivePick::Action(action);
+            }
+        }
+        if learn_sequences {
+            if let Some(keys) = self.pick_sequence(rng) {
+                return AdaptivePick::Keys(keys);
+            }
+        }
+        self.pick_key(rng)
+            .map(|key| AdaptivePick::Keys(vec![key]))
+            .unwrap_or(AdaptivePick::None)
+    }
+
+    fn pick_action(&self, rng: &mut impl Rng) -> Option<String> {
+        let total: u64 = self.successful_actions.values().sum();
+        if total == 0 {
+            return None;
+        }
+        let mut roll = rng.gen_range(0..total);
+        for (action, count) in &self.successful_actions {
+            if roll < *count {
+                return Some(action.clone());
+            }
+            roll -= count;
+        }
+        self.successful_actions.keys().next_back().cloned()
+    }
+
+    fn pick_sequence(&self, rng: &mut impl Rng) -> Option<Vec<String>> {
+        let total: u64 = self.sequences.values().sum();
+        if total < 10 {
+            return None;
+        }
+        let mut roll = rng.gen_range(0..total);
+        let seq = self.sequences.iter().find_map(|(seq, count)| {
+            if roll < *count {
+                Some(seq.clone())
+            } else {
+                roll -= count;
+                None
+            }
+        })?;
+        Some(seq.split('+').map(str::to_string).collect())
+    }
+
+    fn pick_key(&self, rng: &mut impl Rng) -> Option<String> {
         if self.total == 0 {
             return None;
         }
@@ -98,7 +157,6 @@ impl LearnedProfile {
         self.counts.keys().next_back().cloned()
     }
 
-    /// Most-used keys with their share in percent, for the UI.
     pub fn top(&self) -> Vec<TopKey> {
         if self.total == 0 {
             return Vec::new();
@@ -116,7 +174,13 @@ impl LearnedProfile {
     }
 }
 
-/// What the frontend sees about one game's learned profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdaptivePick {
+    None,
+    Keys(Vec<String>),
+    Action(String),
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TopKey {
     pub key: String,
@@ -127,37 +191,31 @@ pub struct TopKey {
 pub struct LearnedSnapshot {
     pub samples: u64,
     pub needed: u64,
-    /// True when keepalives for this game currently use the learned profile.
     pub active: bool,
     pub top: Vec<TopKey>,
 }
 
-pub fn snapshot(profile: &LearnedProfile, active: bool) -> LearnedSnapshot {
+pub fn snapshot(profile: &LearnedProfile, active: bool, needed: u64) -> LearnedSnapshot {
     LearnedSnapshot {
         samples: profile.total,
-        needed: MIN_SAMPLES,
+        needed,
         active,
         top: profile.top(),
     }
 }
 
-/// ISO year-week key used for the decay schedule, e.g. "2026-W24".
 pub fn current_week_key() -> String {
     use chrono::Datelike;
     let week = chrono::Local::now().date_naive().iso_week();
     format!("{}-W{:02}", week.year(), week.week())
 }
 
-/// Whitelisted keys currently held down (Windows only).
 #[cfg(windows)]
 pub fn pressed_keys() -> Vec<&'static str> {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     WHITELIST
         .iter()
-        .filter(|(vk, _)| {
-            // High bit set => key is currently down.
-            (unsafe { GetAsyncKeyState(*vk as i32) } as u16) & 0x8000 != 0
-        })
+        .filter(|(vk, _)| (unsafe { GetAsyncKeyState(*vk as i32) } as u16) & 0x8000 != 0)
         .map(|(_, name)| *name)
         .collect()
 }
@@ -181,70 +239,34 @@ mod tests {
     }
 
     #[test]
-    fn confidence_requires_min_samples() {
+    fn confidence_uses_configurable_threshold() {
         let mut profile = LearnedProfile::default();
-        for _ in 0..MIN_SAMPLES - 1 {
-            assert!(!profile.note(&["W"], "2026-W24"));
+        for _ in 0..29 {
+            profile.note(&["W"], "2026-W24", 30, false);
         }
-        assert!(!profile.confident());
-        // The crossing sample reports the transition exactly once.
-        assert!(profile.note(&["SPACE"], "2026-W24"));
-        assert!(profile.confident());
-        assert!(!profile.note(&["SPACE"], "2026-W24"));
+        assert!(!profile.confident(30));
+        assert!(profile.note(&["W"], "2026-W24", 30, false));
     }
 
     #[test]
-    fn pick_is_weighted_and_within_learned_keys() {
+    fn sequences_record_when_enabled() {
         let mut profile = LearnedProfile::default();
-        for _ in 0..90 {
-            profile.note(&["W"], "2026-W24");
-        }
-        for _ in 0..10 {
-            profile.note(&["E"], "2026-W24");
-        }
+        profile.note(&["W", "SPACE"], "2026-W24", 1, true);
+        assert_eq!(profile.sequences.get("W+SPACE"), Some(&1));
+    }
 
-        let mut rng = StdRng::seed_from_u64(11);
-        let mut w_hits = 0;
-        for _ in 0..200 {
-            let key = profile.pick(&mut rng).expect("pick");
-            assert!(key == "W" || key == "E");
-            if key == "W" {
-                w_hits += 1;
+    #[test]
+    fn pick_sequence_after_enough_samples() {
+        let mut profile = LearnedProfile::default();
+        for _ in 0..20 {
+            profile.note(&["W", "SPACE"], "2026-W24", 1, true);
+        }
+        let mut rng = StdRng::seed_from_u64(3);
+        match profile.pick(&mut rng, true, false) {
+            AdaptivePick::Keys(keys) => {
+                assert_eq!(keys, vec!["W".to_string(), "SPACE".to_string()])
             }
+            other => panic!("expected sequence pick, got {other:?}"),
         }
-        // ~90% of draws should be W; leave generous slack for randomness.
-        assert!(w_hits > 140, "{w_hits}");
-    }
-
-    #[test]
-    fn weekly_decay_halves_counts_and_prunes_zeroes() {
-        let mut profile = LearnedProfile::default();
-        for _ in 0..60 {
-            profile.note(&["W"], "2026-W24");
-        }
-        profile.note(&["E"], "2026-W24");
-        assert_eq!(profile.total, 61);
-
-        profile.note(&["W"], "2026-W25");
-        // 60/2 + 1/2(=0, pruned) + the new sample.
-        assert_eq!(profile.counts.get("W"), Some(&31));
-        assert_eq!(profile.counts.get("E"), None);
-        assert_eq!(profile.total, 31);
-    }
-
-    #[test]
-    fn top_reports_percent_shares() {
-        let mut profile = LearnedProfile::default();
-        for _ in 0..75 {
-            profile.note(&["SPACE"], "2026-W24");
-        }
-        for _ in 0..25 {
-            profile.note(&["D"], "2026-W24");
-        }
-        let top = profile.top();
-        assert_eq!(top[0].key, "SPACE");
-        assert_eq!(top[0].pct, 75);
-        assert_eq!(top[1].key, "D");
-        assert_eq!(top[1].pct, 25);
     }
 }

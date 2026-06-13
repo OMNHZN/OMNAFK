@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.6
+
+- Added quick presets for common keepalive setups.
+- Added keepalive health warnings with session fallback options.
+- Added per-target adaptive controls, success tracking, and immediate monitor move controls.
+- Improved game detection with GPU activity and an always-mark process list.
+- Added headless tray mode and restart-as-administrator support for elevated targets.
+- Updated the website FAQ with admin, fallback, and always-mark guidance.
+
 ## v0.1.5
 
 - Added clearer target details with detection reasons, adaptive action progress, monitor placement status, and holding state.

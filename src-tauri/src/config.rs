@@ -87,6 +87,8 @@ pub struct TargetProfile {
     pub key_sequence: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub monitor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adaptive: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -261,6 +263,14 @@ pub struct AppConfig {
     pub monitor_style: MonitorStyle,
     pub monitor_skip_active: bool,
     pub monitor_skip_active_secs: u64,
+    pub auto_fallback: bool,
+    pub adaptive_min_samples: u64,
+    pub adaptive_learn_sequences: bool,
+    pub adaptive_learn_actions: bool,
+    pub burst_detection: bool,
+    pub headless: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub always_mark_exes: Vec<String>,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
@@ -361,6 +371,13 @@ impl Default for AppConfig {
             monitor_style: MonitorStyle::Preserve,
             monitor_skip_active: true,
             monitor_skip_active_secs: 5,
+            auto_fallback: true,
+            adaptive_min_samples: 50,
+            adaptive_learn_sequences: true,
+            adaptive_learn_actions: true,
+            burst_detection: true,
+            headless: false,
+            always_mark_exes: Vec::new(),
             suspended: false,
             pin_position: None,
             first_run_notified: false,
@@ -419,6 +436,7 @@ impl AppConfig {
             && profile.interval.is_none()
             && profile.key_sequence.is_empty()
             && profile.monitor.is_none()
+            && profile.adaptive.is_none()
         {
             if let Some(classes) = self.profiles.get_mut(&exe_key) {
                 classes.remove(wclass);
@@ -478,6 +496,23 @@ impl AppConfig {
             .cloned()
             .map(ResolvedMonitor::Device)
             .unwrap_or(ResolvedMonitor::Off)
+    }
+
+    /// Whether adaptive learning applies to this target.
+    pub fn adaptive_enabled(&self, exe: &str, wclass: &str) -> bool {
+        if let Some(profile) = self.profile_for(exe, wclass) {
+            if let Some(enabled) = profile.adaptive {
+                return enabled;
+            }
+        }
+        self.adaptive_actions
+    }
+
+    pub fn is_always_marked_exe(&self, exe: &str) -> bool {
+        let exe = exe.to_ascii_lowercase();
+        self.always_mark_exes
+            .iter()
+            .any(|entry| entry.trim().eq_ignore_ascii_case(&exe))
     }
 
     pub fn is_paused(&self, exe: &str, wclass: &str) -> bool {

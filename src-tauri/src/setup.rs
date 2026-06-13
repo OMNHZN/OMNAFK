@@ -345,10 +345,7 @@ pub fn exit_setup(app: tauri::AppHandle) {
     app.exit(0);
 }
 
-fn install(
-    report: &dyn Fn(u8, &str),
-    options: &InstallOptions,
-) -> Result<Vec<String>, String> {
+fn install(report: &dyn Fn(u8, &str), options: &InstallOptions) -> Result<Vec<String>, String> {
     let install_dir = PathBuf::from(options.install_dir.trim());
     if let Some(problem) = install_dir_problem(&install_dir) {
         return Err(problem);
@@ -487,7 +484,12 @@ fn install_dir_problem(path: &Path) -> Option<String> {
     if path.parent().is_none() {
         return Some("Pick a folder, not a drive root.".to_string());
     }
-    for var in ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "windir"] {
+    for var in [
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramW6432",
+        "windir",
+    ] {
         if let Ok(protected) = env::var(var) {
             if !protected.is_empty() && path_starts_with_ignore_case(path, Path::new(&protected)) {
                 return Some(
@@ -667,8 +669,11 @@ fn write_uninstall_key(install_dir: &Path, app_exe: &Path, setup_exe: &Path) -> 
     let estimated_kb = ((payload_raw_len() + setup_len) / 1024) as u32;
     key.set_value("EstimatedSize", &estimated_kb)
         .map_err(reg_error)?;
-    key.set_value("InstallDate", &chrono::Local::now().format("%Y%m%d").to_string())
-        .map_err(reg_error)?;
+    key.set_value(
+        "InstallDate",
+        &chrono::Local::now().format("%Y%m%d").to_string(),
+    )
+    .map_err(reg_error)?;
     key.set_value("NoModify", &1u32).map_err(reg_error)?;
     key.set_value("NoRepair", &1u32).map_err(reg_error)?;
     Ok(())

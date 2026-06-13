@@ -424,6 +424,7 @@ mod tests {
             known_game: false,
             negative_class: false,
             elevated: None,
+            gpu_active: false,
         };
         let (x, y, w, h) = target_geometry(&window, &target, &facts, MonitorStyle::Preserve);
         assert_eq!(w, 800);

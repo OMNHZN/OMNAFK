@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.5",
+  "version": "0.1.6",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,7 +22,7 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.5",
+    "current_version": "0.1.6",
     "latest_version": "0.1.7",
     "latest_tag": "v0.1.7",
     "title": "OMNAFK v0.1.7",
@@ -51,7 +51,8 @@ All payloads are JSON (serde). Times are integer seconds.
       "facts": {                           // detection facts behind the verdict
         "fullscreen": true, "borderless": false, "gfx_dll": true,
         "platform_path": true, "known_game": false, "negative_class": false,
-        "elevated": false | true | null
+        "elevated": false | true | null,
+        "gpu_active": false
       },
       "next_tick": 92 | null,              // per-target seconds to next keepalive
       "last_action_secs": 448 | null,      // seconds since last keepalive attempt
@@ -63,11 +64,16 @@ All payloads are JSON (serde). Times are integer seconds.
         "active": true,                    // keepalives currently draw from this profile
         "top": [ { "key": "W", "pct": 61 }, { "key": "SPACE", "pct": 22 } ]
       } | null,
+      "health_warning": "Keepalive failing (3x) — using focus flick" | null,
+      "consecutive_failures": 0,
+      "success_rate": 92 | null,
+      "primary_keepalive": true,
       "profile": {
         "action": "W tap" | null,
         "interval": 60 | null,
         "key_sequence": ["SPACE", "W"],
-        "monitor": "Use global" | "Don't move" | null
+        "monitor": "Use global" | "Don't move" | null,
+        "adaptive": true | false | null
       },
       "monitor": {
         "target": "Monitor 2 (1920×1080)" | null,
@@ -93,6 +99,13 @@ All payloads are JSON (serde). Times are integer seconds.
     "jitter_pct": 5 | 15 | 30,
     "action": "Space tap" | "W tap" | "Camera nudge" | "Mouse wiggle" | "Scroll tick" | "Right click" | "Key sequence…" | "Per-target…",
     "adaptive_actions": true,
+    "auto_fallback": true,
+    "adaptive_min_samples": 20 | 50 | 100 | 200,
+    "adaptive_learn_sequences": true,
+    "adaptive_learn_actions": true,
+    "burst_detection": true,
+    "headless": false,
+    "always_mark_exes": ["mygame.exe"],
     "monitor_placement": false,
     "monitor_device": null,
     "monitor_when": "Always" | "On launch",
@@ -161,7 +174,11 @@ Lifetime statistics persist separately in `stats.json` next to the config.
 | `test_target` | `{ exe, wclass }` | Send the resolved keepalive action to that window right now. Emit state. |
 | `reset_learning` | `{ exe, wclass }` | Wipe the adaptive input profile learned for that target. Persist. Emit state. |
 | `list_monitors` | — | Return connected displays: `[{ device, label, primary, width, height }]`. |
-| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. Emit state. |
+| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor?, adaptive? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. `adaptive: null` uses global adaptive toggle; `true`/`false` overrides per target. Emit state. |
+| `move_target` | `{ exe, wclass }` | Move one tracked window onto its configured monitor immediately. Emit state. |
+| `apply_preset` | `{ name }` | Apply a named preset (`Roblox`, `Walking simulator`, `Camera AFK`). Persist. Emit state. |
+| `list_presets` | — | Return available preset names. |
+| `restart_as_admin` | — | Relaunch OMNAFK elevated via UAC, then exit the current instance. |
 | `rescan` | — | Force immediate detection pass. Emit state. |
 | `set_suspended` | `{ suspended }` | Enter/leave SUSPENDED. Persist. Emit state. |
 | `snooze` | `{ minutes }` | Suspend for N minutes, auto-resume after (0 cancels an active snooze). Emit state. |

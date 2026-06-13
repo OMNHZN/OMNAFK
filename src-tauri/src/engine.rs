@@ -1,10 +1,12 @@
 use crate::{
     config::{AppConfig, OverrideVerdict, ResolvedAction, ResolvedMonitor, TargetProfile},
-    detector::{self, DetectedWindow, NoGpuUsageProbe, Verdict, WindowFacts},
+    detector::{self, DetectedWindow, Verdict, WindowFacts},
+    gpu::PdhGpuProbe,
+    health::{KeepaliveHealth, FAILURE_THRESHOLD},
     keepalive::{
         self, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer, Win32ActivityProbe,
     },
-    learn::{self, LearnedSnapshot},
+    learn::{self, AdaptivePick, LearnedSnapshot},
     monitor::{self, MonitorInfo, PlacementOptions, PlacementResult},
     stats::{PersistedStats, Stats, StatsSnapshot},
     updates::UpdateCheck,
@@ -24,6 +26,9 @@ use std::{
 };
 
 const DETECTION_INTERVAL: Duration = Duration::from_secs(5);
+const BURST_DETECTION_INTERVAL: Duration = Duration::from_secs(1);
+const BURST_WINDOW: Duration = Duration::from_secs(30);
+const MONITOR_CACHE_TTL: Duration = Duration::from_secs(30);
 const GONE_LINGER: Duration = Duration::from_secs(60);
 const ACTIVITY_LOG_CAP: usize = 50;
 const STATS_SAVE_INTERVAL: Duration = Duration::from_secs(30);
@@ -50,6 +55,7 @@ pub struct GameProfileSnapshot {
     pub interval: Option<u64>,
     pub key_sequence: Vec<String>,
     pub monitor: Option<String>,
+    pub adaptive: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,6 +86,10 @@ pub struct GameSnapshot {
     pub learned: Option<LearnedSnapshot>,
     pub monitor: GameMonitorSnapshot,
     pub profile: GameProfileSnapshot,
+    pub health_warning: Option<String>,
+    pub consecutive_failures: u32,
+    pub success_rate: Option<u8>,
+    pub primary_keepalive: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +113,7 @@ pub struct Engine {
     stop: AtomicBool,
     worker: Mutex<Option<JoinHandle<()>>>,
     sampler: Mutex<Option<JoinHandle<()>>>,
+    gpu: Mutex<PdhGpuProbe>,
 }
 
 #[derive(Debug)]
@@ -121,6 +132,9 @@ struct EngineInner {
     notices: Vec<String>,
     last_stats_save: Instant,
     current_elevated: bool,
+    burst_until: Option<Instant>,
+    monitors_cache: Vec<MonitorInfo>,
+    monitors_cached_at: Instant,
 }
 
 #[derive(Debug)]
@@ -144,6 +158,9 @@ struct TrackedWindow {
     was_armed: bool,
     monitor_placed: bool,
     monitor_status: Option<String>,
+    monitor_move_failures: u32,
+    health: KeepaliveHealth,
+    primary_keepalive: bool,
 }
 
 impl Engine {
@@ -168,10 +185,14 @@ impl Engine {
                 notices: Vec::new(),
                 last_stats_save: Instant::now(),
                 current_elevated: detector::current_process_elevated(),
+                burst_until: None,
+                monitors_cache: Vec::new(),
+                monitors_cached_at: Instant::now() - MONITOR_CACHE_TTL,
             }),
             stop: AtomicBool::new(false),
             worker: Mutex::new(None),
             sampler: Mutex::new(None),
+            gpu: Mutex::new(PdhGpuProbe::default()),
         })
     }
 
@@ -186,7 +207,7 @@ impl Engine {
         *worker = Some(thread::spawn(move || {
             while !engine.stop.load(Ordering::SeqCst) {
                 engine.run_detection_cycle();
-                sleep_until_next_cycle(&engine.stop);
+                sleep_until_next_cycle(&engine.stop, engine.detection_interval());
             }
             engine.persist_stats(true);
         }));
@@ -241,6 +262,7 @@ impl Engine {
                         window.hwnd == foreground
                             && window.effective == Verdict::Game
                             && window.gone_since.is_none()
+                            && inner.config.adaptive_enabled(&window.exe, &window.wclass)
                     })
                     .map(|(identity, window)| (identity.clone(), window.title.clone()))
             })
@@ -254,12 +276,118 @@ impl Engine {
             return;
         }
         let week = learn::current_week_key();
+        let min_samples = {
+            let inner = self.inner.read();
+            inner.config.adaptive_min_samples.max(1)
+        };
+        let learn_sequences = self.inner.read().config.adaptive_learn_sequences;
         let mut inner = self.inner.write();
-        if inner.stats.note_learned_sample(&identity, &keys, &week) {
+        if inner
+            .stats
+            .note_learned_sample(&identity, &keys, &week, min_samples, learn_sequences)
+        {
             inner.push_log(
                 "info",
                 format!("Adaptive profile ready for {title} — keepalives now mimic your inputs"),
             );
+        }
+    }
+
+    pub fn detection_interval(&self) -> Duration {
+        let inner = self.inner.read();
+        if inner.config.burst_detection
+            && inner
+                .burst_until
+                .is_some_and(|until| Instant::now() < until)
+        {
+            BURST_DETECTION_INTERVAL
+        } else {
+            DETECTION_INTERVAL
+        }
+    }
+
+    /// Move one target onto its configured monitor immediately.
+    pub fn move_target(&self, exe: &str, wclass: &str) -> Result<String, String> {
+        let mut inner = self.inner.write();
+        let identity = identity_key(exe, wclass);
+        let (hwnd, title, fullscreen, facts) = {
+            let Some(window) = inner
+                .windows
+                .get(&identity)
+                .filter(|w| w.gone_since.is_none())
+            else {
+                return Err(format!(
+                    "Couldn't move {exe} - the window is not currently visible."
+                ));
+            };
+            (
+                window.hwnd,
+                window.title.clone(),
+                window.facts.fullscreen,
+                window.facts.clone(),
+            )
+        };
+        let monitors = inner.cached_monitors(Instant::now());
+        let options = PlacementOptions {
+            when: inner.config.monitor_when,
+            style: inner.config.monitor_style,
+            skip_active: false,
+            skip_active_secs: inner.config.monitor_skip_active_secs,
+        };
+        let (target_device, target_label) = match inner.config.resolve_monitor(exe, wclass) {
+            ResolvedMonitor::Off => {
+                return Err(
+                    "Couldn't move window - monitor placement is off for this target.".to_string(),
+                );
+            }
+            ResolvedMonitor::Device(device) => {
+                let label = monitor_label(&monitors, &device);
+                (device, label)
+            }
+        };
+        let result = monitor::try_place_window(
+            hwnd,
+            &target_device,
+            &facts,
+            &options,
+            false,
+            Instant::now(),
+            &Win32ActivityProbe,
+        );
+        if let Some(window) = inner.windows.get_mut(&identity) {
+            window.monitor_status = Some(result.status_label().to_string());
+            if matches!(
+                result,
+                PlacementResult::Moved | PlacementResult::AlreadyOnTarget
+            ) {
+                window.monitor_placed = true;
+                window.monitor_move_failures = 0;
+            } else if let PlacementResult::Failed(_) = result {
+                window.monitor_move_failures = window.monitor_move_failures.saturating_add(1);
+            }
+        }
+        match result {
+            PlacementResult::Moved => {
+                let label = target_label.unwrap_or(target_device);
+                inner.push_log("info", format!("Moved {title} to {label}"));
+                Ok(format!("Moved to {label}"))
+            }
+            PlacementResult::AlreadyOnTarget => Ok("Already on target monitor".to_string()),
+            PlacementResult::SkippedActive => {
+                Err("Move skipped — you're actively using the game.".to_string())
+            }
+            PlacementResult::MonitorMissing => {
+                Err("Target monitor is disconnected — pick another monitor.".to_string())
+            }
+            PlacementResult::Failed(reason) => {
+                let hint = if fullscreen {
+                    format!("{reason} Try borderless or windowed mode for monitor placement.")
+                } else {
+                    reason
+                };
+                Err(hint)
+            }
+            other => Err(other.status_label().to_string()),
         }
     }
 
@@ -292,8 +420,16 @@ impl Engine {
             }
         }
 
-        let sensitivity = self.inner.read().config.sensitivity;
-        let detected = detector::scan_windows(sensitivity, &NoGpuUsageProbe);
+        let (sensitivity, always_mark) = {
+            let inner = self.inner.read();
+            (
+                inner.config.sensitivity,
+                inner.config.always_mark_exes.clone(),
+            )
+        };
+        let gpu = self.gpu.lock();
+        let detected = detector::scan_windows(sensitivity, &*gpu, &always_mark);
+        drop(gpu);
         {
             let mut inner = self.inner.write();
             inner.apply_detection(detected, Instant::now());
@@ -331,12 +467,23 @@ impl Engine {
                         .config
                         .profile_for(&window.exe, &window.wclass)
                         .is_some_and(|p| p.action.is_some());
+                    let min_samples = inner.config.adaptive_min_samples.max(1);
                     learn::snapshot(
                         profile,
-                        inner.config.adaptive_actions && profile.confident() && !explicit,
+                        inner.config.adaptive_enabled(&window.exe, &window.wclass)
+                            && profile.confident(min_samples)
+                            && !explicit,
+                        min_samples,
                     )
                 });
-                window.snapshot(&inner.config, now, inner.current_elevated, learned)
+                let success_rate = inner.stats.game_success_rate(identity);
+                window.snapshot(
+                    &inner.config,
+                    now,
+                    inner.current_elevated,
+                    learned,
+                    success_rate,
+                )
             })
             .collect();
         games.sort_by_key(|game| (game.effective != Verdict::Game, game.gone, game.exe.clone()));
@@ -414,31 +561,45 @@ impl Engine {
     pub fn test_target(&self, exe: &str, wclass: &str) -> Result<String, String> {
         let mut inner = self.inner.write();
         let identity = identity_key(exe, wclass);
-        let Some(window) = inner
-            .windows
-            .get(&identity)
-            .filter(|w| w.gone_since.is_none())
-        else {
-            return Err(format!(
-                "Couldn't test {exe} - the window is not currently visible."
-            ));
+        let (hwnd, title, exe_c, wclass_c, health) = {
+            let Some(window) = inner
+                .windows
+                .get(&identity)
+                .filter(|w| w.gone_since.is_none())
+            else {
+                return Err(format!(
+                    "Couldn't test {exe} - the window is not currently visible."
+                ));
+            };
+            (
+                window.hwnd,
+                window.title.clone(),
+                window.exe.clone(),
+                window.wclass.clone(),
+                window.health.clone(),
+            )
         };
-        let mut options = KeepaliveOptions::from_config(&inner.config, &window.exe, &window.wclass);
-        let adaptive_key =
-            inner.adaptive_pick(&identity, &window.exe, &window.wclass, &mut thread_rng());
-        if let Some(key) = &adaptive_key {
-            options.action = ResolvedAction::KeySequence(vec![key.clone()]);
-        }
+        let base_action = KeepaliveOptions::from_config(&inner.config, &exe_c, &wclass_c).action;
+        let (action, send_without_focus, label, _log_label) = resolve_keepalive_action(
+            KeepaliveResolveContext {
+                config: &inner.config,
+                stats: &inner.stats,
+                identity: &identity,
+                exe: &exe_c,
+                wclass: &wclass_c,
+                base: &base_action,
+                health: &health,
+            },
+            &mut thread_rng(),
+        );
+        let mut options = KeepaliveOptions::from_config(&inner.config, &exe_c, &wclass_c);
+        options.action = action;
+        options.send_without_focus = send_without_focus;
         let target = KeepaliveTarget {
-            hwnd: window.hwnd,
-            exe: window.exe.clone(),
-            wclass: window.wclass.clone(),
+            hwnd,
+            exe: exe_c,
+            wclass: wclass_c,
         };
-        let label = match &adaptive_key {
-            Some(key) => format!("Adaptive ({key})"),
-            None => options.action.label(),
-        };
-        let title = window.title.clone();
         match keepalive::send_keepalive(&target, &options) {
             Ok(()) => {
                 let now = Instant::now();
@@ -446,15 +607,25 @@ impl Engine {
                     window.actions = window.actions.saturating_add(1);
                     window.last_action_at = Some(now);
                     window.last_action_ok = Some(true);
+                    window.health.note_success();
                 }
-                inner.stats.note_action(&identity, &title, &label);
+                inner
+                    .stats
+                    .note_action_result(&identity, &title, &label, true);
                 inner.push_log("action", format!("Test: {label} → {title}"));
                 Ok(label)
             }
             Err(error) => {
+                let auto_fallback = inner.config.auto_fallback;
                 if let Some(window) = inner.windows.get_mut(&identity) {
                     window.last_action_ok = Some(false);
+                    if let Some(warning) = window.health.note_failure(auto_fallback) {
+                        inner.push_log("error", warning);
+                    }
                 }
+                inner
+                    .stats
+                    .note_action_result(&identity, &title, &label, false);
                 inner.push_log("error", error.to_string());
                 Err(error.to_string())
             }
@@ -527,7 +698,11 @@ impl EngineInner {
             };
 
             let paused = self.config.is_paused(&window.exe, &window.wclass);
-            if window.effective == Verdict::Game && window.gone_since.is_none() && !paused {
+            if window.effective == Verdict::Game
+                && window.gone_since.is_none()
+                && !paused
+                && window.primary_keepalive
+            {
                 if window.timer.is_none() {
                     let options =
                         KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
@@ -597,10 +772,21 @@ impl EngineInner {
                     was_armed: false,
                     monitor_placed: false,
                     monitor_status: None,
+                    monitor_move_failures: 0,
+                    health: KeepaliveHealth::default(),
+                    primary_keepalive: true,
                 });
 
             if effective == Verdict::Game {
                 self.stats.note_seen_today(&identity);
+                if self.config.burst_detection {
+                    let until = now + BURST_WINDOW;
+                    self.burst_until = Some(
+                        self.burst_until
+                            .map(|current| current.max(until))
+                            .unwrap_or(until),
+                    );
+                }
             }
         }
 
@@ -617,9 +803,45 @@ impl EngineInner {
         });
 
         self.recompute_effective(now);
+        self.assign_primary_keepalives();
         self.note_armed_transitions();
         self.place_windows(now, &activity);
         self.drive_keepalives(now, elapsed, &activity, &mut rng);
+    }
+
+    fn assign_primary_keepalives(&mut self) {
+        let mut best: BTreeMap<String, (String, i32, isize)> = BTreeMap::new();
+        for (identity, window) in &self.windows {
+            if window.effective != Verdict::Game || window.gone_since.is_some() {
+                continue;
+            }
+            let exe = window.exe.to_ascii_lowercase();
+            match best.get(&exe) {
+                Some((_, best_score, best_hwnd))
+                    if (window.score, window.hwnd) <= (*best_score, *best_hwnd) => {}
+                _ => {
+                    best.insert(exe, (identity.clone(), window.score, window.hwnd));
+                }
+            }
+        }
+        for (identity, window) in self.windows.iter_mut() {
+            let exe = window.exe.to_ascii_lowercase();
+            window.primary_keepalive = best
+                .get(&exe)
+                .is_some_and(|(best_id, _, _)| best_id == identity);
+            if !window.primary_keepalive {
+                window.timer = None;
+            }
+        }
+    }
+
+    fn cached_monitors(&mut self, now: Instant) -> Vec<MonitorInfo> {
+        if self.monitors_cache.is_empty() || self.monitors_cached_at.elapsed() >= MONITOR_CACHE_TTL
+        {
+            self.monitors_cache = monitor::list_monitors();
+            self.monitors_cached_at = now;
+        }
+        self.monitors_cache.clone()
     }
 
     fn place_windows(&mut self, now: Instant, activity: &Win32ActivityProbe) {
@@ -627,7 +849,7 @@ impl EngineInner {
             return;
         }
 
-        let monitors = monitor::list_monitors();
+        let monitors = self.cached_monitors(now);
         let options = PlacementOptions {
             when: self.config.monitor_when,
             style: self.config.monitor_style,
@@ -641,6 +863,9 @@ impl EngineInner {
                 continue;
             };
             if window.effective != Verdict::Game || window.gone_since.is_some() {
+                continue;
+            }
+            if !window.primary_keepalive {
                 continue;
             }
             if self.config.is_paused(&window.exe, &window.wclass) {
@@ -685,6 +910,13 @@ impl EngineInner {
                     PlacementResult::Moved | PlacementResult::AlreadyOnTarget
                 ) {
                     window.monitor_placed = true;
+                    window.monitor_move_failures = 0;
+                } else if matches!(result, PlacementResult::Failed(_)) {
+                    window.monitor_move_failures = window.monitor_move_failures.saturating_add(1);
+                    if window.facts.fullscreen && window.monitor_move_failures >= FAILURE_THRESHOLD
+                    {
+                        window.monitor_status = Some("Try borderless/windowed".to_string());
+                    }
                 }
             }
 
@@ -701,6 +933,7 @@ impl EngineInner {
                     "error",
                     format!("Monitor move failed for {title}: {reason}"),
                 );
+                self.push_notice(format!("Monitor move failed for {title}"));
             }
         }
     }
@@ -731,32 +964,6 @@ impl EngineInner {
                 self.push_notice(text);
             }
         }
-    }
-
-    /// Draw a learned key for this target, when adaptive actions apply.
-    /// An explicit per-target action always outranks the learned profile.
-    fn adaptive_pick(
-        &self,
-        identity: &str,
-        exe: &str,
-        wclass: &str,
-        rng: &mut impl rand::Rng,
-    ) -> Option<String> {
-        if !self.config.adaptive_actions {
-            return None;
-        }
-        if self
-            .config
-            .profile_for(exe, wclass)
-            .is_some_and(|profile| profile.action.is_some())
-        {
-            return None;
-        }
-        let profile = self.stats.learned_profile(identity)?;
-        if !profile.confident() {
-            return None;
-        }
-        profile.pick(rng)
     }
 
     /// Why the engine is currently holding fire across all targets, if at all.
@@ -852,20 +1059,34 @@ impl EngineInner {
             if self.config.is_paused(&window.exe, &window.wclass) {
                 continue;
             }
+            if !window.primary_keepalive {
+                continue;
+            }
 
             active_count += 1;
             let title = window.title.clone();
-            let mut options =
-                KeepaliveOptions::from_config(&self.config, &window.exe, &window.wclass);
-            let adaptive_key = self.adaptive_pick(&identity, &window.exe, &window.wclass, rng);
-            if let Some(key) = &adaptive_key {
-                options.action = ResolvedAction::KeySequence(vec![key.clone()]);
-            }
-            let target = KeepaliveTarget {
-                hwnd: window.hwnd,
-                exe: window.exe.clone(),
-                wclass: window.wclass.clone(),
-            };
+            let exe = window.exe.clone();
+            let wclass = window.wclass.clone();
+            let hwnd = window.hwnd;
+            let base_action = KeepaliveOptions::from_config(&self.config, &exe, &wclass).action;
+            let health = window.health.clone();
+
+            let (action, send_without_focus, label, log_label) = resolve_keepalive_action(
+                KeepaliveResolveContext {
+                    config: &self.config,
+                    stats: &self.stats,
+                    identity: &identity,
+                    exe: &exe,
+                    wclass: &wclass,
+                    base: &base_action,
+                    health: &health,
+                },
+                rng,
+            );
+            let mut options = KeepaliveOptions::from_config(&self.config, &exe, &wclass);
+            options.action = action;
+            options.send_without_focus = send_without_focus;
+            let target = KeepaliveTarget { hwnd, exe, wclass };
 
             if gate.is_none() && elapsed > 0 {
                 self.stats.note_kept(&identity, &title, elapsed);
@@ -901,21 +1122,18 @@ impl EngineInner {
                     timer.reschedule(now, &options, rng);
                 }
                 TickDecision::Send => {
-                    // Stats group all adaptive sends together; the log shows the drawn key.
-                    let (label, log_label) = match &adaptive_key {
-                        Some(key) => ("Adaptive".to_string(), format!("Adaptive ({key})")),
-                        None => {
-                            let label = options.action.label();
-                            (label.clone(), label)
-                        }
-                    };
                     match keepalive::send_keepalive(&target, &options) {
                         Ok(()) => {
                             let first = window.actions == 0;
                             window.actions = window.actions.saturating_add(1);
                             window.last_action_at = Some(now);
                             window.last_action_ok = Some(true);
-                            self.stats.note_action(&identity, &title, &label);
+                            window.health.note_success();
+                            self.stats
+                                .note_action_result(&identity, &title, &label, true);
+                            if self.config.adaptive_learn_actions {
+                                self.stats.note_learned_action_success(&identity, &label);
+                            }
                             self.last_error = None;
                             log_entries
                                 .push(("action".into(), format!("Sent {log_label} to {title}")));
@@ -925,6 +1143,14 @@ impl EngineInner {
                         }
                         Err(error) => {
                             window.last_action_ok = Some(false);
+                            if let Some(warning) =
+                                window.health.note_failure(self.config.auto_fallback)
+                            {
+                                log_entries.push(("error".into(), warning.clone()));
+                                notices.push(warning);
+                            }
+                            self.stats
+                                .note_action_result(&identity, &title, &label, false);
                             self.last_error = Some(error.to_string());
                             log_entries.push(("error".into(), error.to_string()));
                             if notify_errors {
@@ -981,6 +1207,7 @@ impl TrackedWindow {
         now: Instant,
         current_elevated: bool,
         learned: Option<LearnedSnapshot>,
+        success_rate: Option<u8>,
     ) -> GameSnapshot {
         let profile = config
             .profile_for(&self.exe, &self.wclass)
@@ -1017,7 +1244,99 @@ impl TrackedWindow {
                 status: self.monitor_status.clone(),
             },
             profile: profile_snapshot(&profile, config),
+            health_warning: self.health.warning(),
+            consecutive_failures: self.health.consecutive_failures,
+            success_rate,
+            primary_keepalive: self.primary_keepalive,
         }
+    }
+}
+
+struct KeepaliveResolveContext<'a> {
+    config: &'a AppConfig,
+    stats: &'a Stats,
+    identity: &'a str,
+    exe: &'a str,
+    wclass: &'a str,
+    base: &'a ResolvedAction,
+    health: &'a KeepaliveHealth,
+}
+
+fn resolve_keepalive_action(
+    ctx: KeepaliveResolveContext<'_>,
+    rng: &mut impl rand::Rng,
+) -> (ResolvedAction, bool, String, String) {
+    let KeepaliveResolveContext {
+        config,
+        stats,
+        identity,
+        exe,
+        wclass,
+        base,
+        health,
+    } = ctx;
+    let (mut action, send_without_focus) = health.apply_to_options(base, config.send_without_focus);
+
+    if config.adaptive_enabled(exe, wclass)
+        && config
+            .profile_for(exe, wclass)
+            .is_none_or(|p| p.action.is_none())
+    {
+        if let Some(profile) = stats.learned_profile(identity) {
+            let min = config.adaptive_min_samples.max(1);
+            if profile.confident(min) {
+                match profile.pick(
+                    rng,
+                    config.adaptive_learn_sequences,
+                    config.adaptive_learn_actions,
+                ) {
+                    AdaptivePick::Keys(keys) => {
+                        action = ResolvedAction::KeySequence(keys.clone());
+                        let log = if keys.len() > 1 {
+                            format!("Adaptive ({})", keys.join("+"))
+                        } else {
+                            format!("Adaptive ({})", keys.first().cloned().unwrap_or_default())
+                        };
+                        return (action, send_without_focus, "Adaptive".to_string(), log);
+                    }
+                    AdaptivePick::Action(label) => {
+                        if let Some(resolved) = resolved_from_label(&label) {
+                            action = resolved;
+                            return (
+                                action.clone(),
+                                send_without_focus,
+                                label.clone(),
+                                format!("Adaptive ({label})"),
+                            );
+                        }
+                    }
+                    AdaptivePick::None => {}
+                }
+            }
+        }
+    }
+
+    let label = action.label();
+    (action, send_without_focus, label.clone(), label)
+}
+
+fn resolved_from_label(label: &str) -> Option<ResolvedAction> {
+    match label {
+        "Space tap" => Some(ResolvedAction::SpaceTap),
+        "W tap" => Some(ResolvedAction::WTap),
+        "Camera nudge" => Some(ResolvedAction::CameraNudge),
+        "Mouse wiggle" => Some(ResolvedAction::MouseWiggle),
+        "Scroll tick" => Some(ResolvedAction::ScrollTick),
+        "Right click" => Some(ResolvedAction::RightClick),
+        other if other.starts_with("Keys ") => {
+            let keys = other
+                .trim_start_matches("Keys ")
+                .split('+')
+                .map(str::to_string)
+                .collect();
+            Some(ResolvedAction::KeySequence(keys))
+        }
+        _ => None,
     }
 }
 
@@ -1030,6 +1349,7 @@ fn profile_snapshot(profile: &TargetProfile, config: &AppConfig) -> GameProfileS
             .monitor
             .clone()
             .or_else(|| profile_monitor_global_label(config)),
+        adaptive: profile.adaptive,
     }
 }
 
@@ -1096,9 +1416,9 @@ pub fn log_file_path() -> Option<std::path::PathBuf> {
     dirs::config_dir().map(|dir| dir.join("OMNAFK").join("omnafk.log"))
 }
 
-fn sleep_until_next_cycle(stop: &AtomicBool) {
+fn sleep_until_next_cycle(stop: &AtomicBool, interval: Duration) {
     let start = Instant::now();
-    while !stop.load(Ordering::SeqCst) && start.elapsed() < DETECTION_INTERVAL {
+    while !stop.load(Ordering::SeqCst) && start.elapsed() < interval {
         thread::sleep(Duration::from_millis(250));
     }
 }

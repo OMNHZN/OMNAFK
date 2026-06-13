@@ -7,6 +7,7 @@ use crate::{
     },
     engine::{ActivityEvent, EngineStatus, GameSnapshot, SharedEngine},
     flyout, monitor,
+    presets::{self, PRESET_NAMES},
     stats::StatsSnapshot,
     updates,
 };
@@ -17,6 +18,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
+use windows::{
+    core::HSTRING,
+    Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
+};
 
 const STATE_EVENT: &str = "omnafk://state";
 
@@ -48,6 +53,13 @@ pub struct ConfigPayload {
     pub jitter_pct: u8,
     pub action: KeepaliveAction,
     pub adaptive_actions: bool,
+    pub auto_fallback: bool,
+    pub adaptive_min_samples: u64,
+    pub adaptive_learn_sequences: bool,
+    pub adaptive_learn_actions: bool,
+    pub burst_detection: bool,
+    pub headless: bool,
+    pub always_mark_exes: Vec<String>,
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
     pub hold_while_playing: bool,
@@ -117,6 +129,13 @@ impl From<&AppConfig> for ConfigPayload {
             jitter_pct: config.jitter_pct,
             action: config.action,
             adaptive_actions: config.adaptive_actions,
+            auto_fallback: config.auto_fallback,
+            adaptive_min_samples: config.adaptive_min_samples,
+            adaptive_learn_sequences: config.adaptive_learn_sequences,
+            adaptive_learn_actions: config.adaptive_learn_actions,
+            burst_detection: config.burst_detection,
+            headless: config.headless,
+            always_mark_exes: config.always_mark_exes.clone(),
             key_sequence: config.key_sequence.clone(),
             send_without_focus: config.send_without_focus,
             hold_while_playing: config.hold_while_playing,
@@ -165,6 +184,56 @@ impl From<&AppConfig> for ConfigPayload {
             armed_overrides,
         }
     }
+}
+
+#[tauri::command]
+pub fn list_presets() -> Vec<&'static str> {
+    PRESET_NAMES.to_vec()
+}
+
+#[tauri::command]
+pub fn apply_preset(
+    name: String,
+    app: AppHandle,
+    engine: State<'_, SharedEngine>,
+) -> Result<StatePayload, String> {
+    let payload = mutate_config_with_reschedule(&app, engine.inner(), true, |config| {
+        presets::apply_preset(config, &name)
+    })?;
+    Ok(payload)
+}
+
+#[tauri::command]
+pub fn move_target(
+    exe: String,
+    wclass: String,
+    app: AppHandle,
+    engine: State<'_, SharedEngine>,
+) -> Result<StatePayload, String> {
+    engine.move_target(&exe, &wclass)?;
+    emit_and_return(&app, engine.inner())
+}
+
+#[tauri::command]
+pub fn restart_as_admin(app: AppHandle, engine: State<'_, SharedEngine>) -> Result<(), String> {
+    if crate::detector::current_process_elevated() {
+        return Err("OMNAFK is already running as administrator.".to_string());
+    }
+    let exe = std::env::current_exe().map_err(|error| {
+        format!("Couldn't locate OMNAFK - reinstall the app to fix this: {error}")
+    })?;
+    let verb = HSTRING::from("runas");
+    let file = HSTRING::from(exe.to_string_lossy().as_ref());
+    let result = unsafe { ShellExecuteW(None, &verb, &file, None, None, SW_SHOWNORMAL) };
+    if result.0 as isize <= 32 {
+        return Err(
+            "Couldn't restart as administrator - approve the UAC prompt or run OMNAFK as admin manually."
+                .to_string(),
+        );
+    }
+    engine.stop();
+    app.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -305,6 +374,7 @@ pub fn set_target_profile(
     interval: Option<u64>,
     key_sequence: Option<Vec<String>>,
     monitor: Option<String>,
+    adaptive: Option<bool>,
     app: AppHandle,
     engine: State<'_, SharedEngine>,
 ) -> Result<StatePayload, String> {
@@ -340,6 +410,8 @@ pub fn set_target_profile(
             Some("Don't move") => Some("Don't move".to_string()),
             Some(device) => Some(device.to_string()),
         };
+
+        profile.adaptive = adaptive;
 
         config.set_profile(&exe, &wclass, profile);
         Ok(())
@@ -837,6 +909,39 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
         }
         "randomize" => config.randomize = bool_value(value, key)?,
         "adaptive_actions" => config.adaptive_actions = bool_value(value, key)?,
+        "auto_fallback" => config.auto_fallback = bool_value(value, key)?,
+        "adaptive_learn_sequences" => config.adaptive_learn_sequences = bool_value(value, key)?,
+        "adaptive_learn_actions" => config.adaptive_learn_actions = bool_value(value, key)?,
+        "burst_detection" => config.burst_detection = bool_value(value, key)?,
+        "headless" => config.headless = bool_value(value, key)?,
+        "adaptive_min_samples" => {
+            let samples = value.as_u64().ok_or_else(|| {
+                "Couldn't set adaptive sample threshold - choose a number to fix this.".to_string()
+            })?;
+            if !(10..=500).contains(&samples) {
+                return Err(
+                    "Couldn't set adaptive sample threshold - choose 10 to 500 to fix this."
+                        .to_string(),
+                );
+            }
+            config.adaptive_min_samples = samples;
+        }
+        "always_mark_exes" => {
+            config.always_mark_exes = if let Some(items) = value.as_array() {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str())
+                    .map(|s| s.trim().to_ascii_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            } else {
+                string_value(value, key)?
+                    .split(',')
+                    .map(|s| s.trim().to_ascii_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+        }
         "monitor_placement" => config.monitor_placement = bool_value(value, key)?,
         "monitor_skip_active" => config.monitor_skip_active = bool_value(value, key)?,
         "monitor_device" => {

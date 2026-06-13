@@ -16,6 +16,8 @@ pub struct GameTotals {
     pub title: String,
     pub kept: u64,
     pub actions: u64,
+    pub actions_ok: u64,
+    pub actions_fail: u64,
 }
 
 /// Slice of stats that survives restarts (written to stats.json).
@@ -57,6 +59,9 @@ pub struct GameTotalsSnapshot {
     pub title: String,
     pub kept: u64,
     pub actions: u64,
+    pub actions_ok: u64,
+    pub actions_fail: u64,
+    pub success_rate: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -103,6 +108,16 @@ impl Stats {
     }
 
     pub fn note_action(&mut self, identity: &str, title: &str, action_label: &str) {
+        self.note_action_result(identity, title, action_label, true);
+    }
+
+    pub fn note_action_result(
+        &mut self,
+        identity: &str,
+        title: &str,
+        action_label: &str,
+        ok: bool,
+    ) {
         self.actions = self.actions.saturating_add(1);
         *self
             .actions_by_type
@@ -121,7 +136,20 @@ impl Stats {
             .or_default();
         game.title = title.to_string();
         game.actions = game.actions.saturating_add(1);
+        if ok {
+            game.actions_ok = game.actions_ok.saturating_add(1);
+        } else {
+            game.actions_fail = game.actions_fail.saturating_add(1);
+        }
         self.dirty = true;
+    }
+
+    pub fn game_success_rate(&self, identity: &str) -> Option<u8> {
+        let game = self.persisted.per_game.get(identity)?;
+        if game.actions == 0 {
+            return None;
+        }
+        Some(((game.actions_ok * 100) / game.actions.max(1)) as u8)
     }
 
     pub fn note_seen_today(&mut self, identity: &str) {
@@ -143,7 +171,14 @@ impl Stats {
 
     /// Record one adaptive-learning observation. Returns true when this
     /// sample made the game's profile confident for the first time.
-    pub fn note_learned_sample(&mut self, identity: &str, keys: &[&str], week: &str) -> bool {
+    pub fn note_learned_sample(
+        &mut self,
+        identity: &str,
+        keys: &[&str],
+        week: &str,
+        min_samples: u64,
+        learn_sequences: bool,
+    ) -> bool {
         if keys.is_empty() {
             return false;
         }
@@ -152,7 +187,7 @@ impl Stats {
             .learned
             .entry(identity.to_string())
             .or_default()
-            .note(keys, week);
+            .note(keys, week, min_samples, learn_sequences);
         self.dirty = true;
         crossed
     }
@@ -163,6 +198,13 @@ impl Stats {
 
     pub fn reset_learned(&mut self, identity: &str) {
         if self.persisted.learned.remove(identity).is_some() {
+            self.dirty = true;
+        }
+    }
+
+    pub fn note_learned_action_success(&mut self, identity: &str, action_label: &str) {
+        if let Some(profile) = self.persisted.learned.get_mut(identity) {
+            profile.note_action_success(action_label);
             self.dirty = true;
         }
     }
@@ -228,6 +270,10 @@ impl Stats {
                 title: totals.title.clone(),
                 kept: totals.kept,
                 actions: totals.actions,
+                actions_ok: totals.actions_ok,
+                actions_fail: totals.actions_fail,
+                success_rate: (totals.actions > 0)
+                    .then_some(((totals.actions_ok * 100) / totals.actions.max(1)) as u8),
             })
             .collect();
         lifetime_games.sort_by_key(|game| Reverse(game.kept));
@@ -332,11 +378,25 @@ mod tests {
 
     #[test]
     fn learned_profiles_persist_and_reset() {
+        use crate::learn::DEFAULT_MIN_SAMPLES;
+
         let mut stats = Stats::default();
         for _ in 0..49 {
-            assert!(!stats.note_learned_sample("game.exe\u{1f}CLASS", &["W"], "2026-W24"));
+            assert!(!stats.note_learned_sample(
+                "game.exe\u{1f}CLASS",
+                &["W"],
+                "2026-W24",
+                DEFAULT_MIN_SAMPLES,
+                false,
+            ));
         }
-        assert!(stats.note_learned_sample("game.exe\u{1f}CLASS", &["SPACE"], "2026-W24"));
+        assert!(stats.note_learned_sample(
+            "game.exe\u{1f}CLASS",
+            &["SPACE"],
+            "2026-W24",
+            DEFAULT_MIN_SAMPLES,
+            false,
+        ));
 
         let json = serde_json::to_string(stats.persisted()).expect("serialize");
         let restored: PersistedStats = serde_json::from_str(&json).expect("deserialize");
@@ -344,7 +404,7 @@ mod tests {
         let profile = revived
             .learned_profile("game.exe\u{1f}CLASS")
             .expect("profile");
-        assert!(profile.confident());
+        assert!(profile.confident(DEFAULT_MIN_SAMPLES));
         assert_eq!(profile.counts.get("W"), Some(&49));
 
         let mut revived = revived;

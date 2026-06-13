@@ -187,7 +187,7 @@
     </section>
     <div class="quick">
       <span>Windows 10 / 11</span>
-      <span>Stable v0.1.5</span>
+      <span>Stable v0.1.6</span>
       <a href="https://github.com/OMNHZN/OMNAFK/releases">Releases</a>
       <a href="https://github.com/OMNHZN/OMNAFK">Source code</a>
     </div>
@@ -293,7 +293,15 @@
         </article>
         <article class="faq-item">
           <h3>Does it need admin?</h3>
-          <p>The setup is per-user. If a target app runs elevated, Windows may block normal background input unless OMNAFK is running at the same level.</p>
+          <p>The setup is per-user. If a target app runs elevated, Windows may block normal background input unless OMNAFK is running at the same level. Use <b>Restart as administrator</b> in Settings when Sightline shows the admin warning.</p>
+        </article>
+        <article class="faq-item">
+          <h3>What if keepalives keep failing?</h3>
+          <p>Sightline shows a health warning after repeated failures. Turn on <b>Auto-fallback</b> in General so OMNAFK tries focus-flick mode and then camera nudge for that game this session.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Can I force a game to be marked?</h3>
+          <p>Yes. Add its process name under <b>Always mark exes</b> in General → Advanced, or pin it manually in Sightline.</p>
         </article>
         <article class="faq-item">
           <h3>Where are settings kept?</h3>
@@ -370,7 +378,7 @@
   </section>
 
   <footer>
-    <div class="wrap">v0.1.5 - MIT license - Windows 10/11 - Use at your own discretion</div>
+    <div class="wrap">v0.1.6 - MIT license - Windows 10/11 - Use at your own discretion</div>
   </footer>
 </body>
 </html>

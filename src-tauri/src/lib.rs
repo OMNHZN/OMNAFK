@@ -6,10 +6,13 @@ pub mod config;
 pub mod detector;
 pub mod engine;
 pub mod flyout;
+pub mod gpu;
+pub mod health;
 pub mod ipc;
 pub mod keepalive;
 pub mod learn;
 pub mod monitor;
+pub mod presets;
 pub mod setup;
 pub mod stats;
 pub mod tray;
@@ -22,7 +25,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = flyout::open_default(app);
+            let engine = app.state::<engine::SharedEngine>();
+            if !engine.snapshot().config.headless {
+                let _ = flyout::open_default(app);
+            }
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -39,7 +45,7 @@ pub fn run() {
                     config::AppConfig::default()
                 }
             };
-            let show_on_launch = config.show_on_launch;
+            let show_on_launch = config.show_on_launch && !config.headless;
             let first_run_notified = config.first_run_notified;
             let notifications = config.notifications;
             let update_options = LaunchUpdateCheckOptions {
@@ -95,6 +101,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ipc::list_presets,
+            ipc::apply_preset,
+            ipc::move_target,
+            ipc::restart_as_admin,
             ipc::list_monitors,
             ipc::get_state,
             ipc::set_config,
