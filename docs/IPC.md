@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.6",
+  "version": "0.1.7",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,16 +22,16 @@ All payloads are JSON (serde). Times are integer seconds.
   "update": {
     "repo": "OMNHZN/OMNAFK",
     "channel": "Stable",
-    "current_version": "0.1.6",
-    "latest_version": "0.1.7",
-    "latest_tag": "v0.1.7",
-    "title": "OMNAFK v0.1.7",
-    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.7",
+    "current_version": "0.1.7",
+    "latest_version": "0.1.8",
+    "latest_tag": "v0.1.8",
+    "title": "OMNAFK v0.1.8",
+    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.8",
     "published_at": "2026-06-10T20:00:00Z",
     "prerelease": false,
     "update_available": true,
     "asset_name": "OMNAFK-Setup.exe",
-    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.7/OMNAFK-Setup.exe",
+    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.8/OMNAFK-Setup.exe",
     "notes_excerpt": "Short release notes excerpt."
   } | null,
   "games": [

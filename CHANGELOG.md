@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.7
+
+- Reorganized the General tab around setup, timing, action, and safety controls.
+- Collapsed deeper timing, recovery, monitor placement, maintenance, and about details so daily controls stay easier to scan.
+- Separated Settings into clearer startup, detection, hotkey, notification, app mode, interface, update, and maintenance sections.
+- Refreshed the About tab so update and support actions are easier to find.
+
 ## v0.1.6
 
 - Added quick presets for common keepalive setups.
