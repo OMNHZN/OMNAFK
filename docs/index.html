@@ -128,6 +128,10 @@
   .guide-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
   .guide-list li { color: var(--dim); font-size: 14px; line-height: 1.6; }
   .guide-list b { color: var(--text); font: 700 12px var(--mono); margin-right: 6px; }
+  .faq-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .faq-item { background: var(--surface); padding: 22px; min-height: 150px; }
+  .faq-item h3 { margin: 0 0 10px; font: 700 13px var(--mono); letter-spacing: 0; }
+  .faq-item p { margin: 0; color: var(--dim); font-size: 14px; line-height: 1.6; }
   .control-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
   .control-list div { background: var(--surface); padding: 18px 20px; color: var(--dim); line-height: 1.55; font-size: 14px; }
   .control-list b { display: block; color: var(--text); font: 700 12px var(--mono); margin-bottom: 6px; }
@@ -145,7 +149,7 @@
         #000;
     }
     .hero-copy { padding-top: 430px; padding-bottom: 62px; }
-    .features, .showcase, .quick, .app-grid, .flow, .guide-grid, .control-list { grid-template-columns: 1fr; }
+    .features, .showcase, .quick, .app-grid, .flow, .guide-grid, .faq-grid, .control-list { grid-template-columns: 1fr; }
     .quick a, .quick span { border-right: 0; border-bottom: 1px solid var(--line); justify-content: flex-start; }
     .quick :last-child { border-bottom: 0; }
     .nav-links { gap: 12px; font-size: 11px; }
@@ -265,6 +269,39 @@
             <li><b>Using more than one monitor?</b> Choose monitor placement in General, then override single targets from Sightline when needed.</li>
             <li><b>Need help?</b> Use Bug report from About so the report opens with the right template.</li>
           </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="faq">
+    <div class="wrap">
+      <p class="eyebrow">NEED TO KNOW</p>
+      <h2>Quiet defaults, clear limits.</h2>
+      <div class="faq-grid">
+        <article class="faq-item">
+          <h3>Does it steal focus?</h3>
+          <p>No. Send without focus is on by default, so keepalives use background window messages instead of pulling you away from what you are doing.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Does it always press Space?</h3>
+          <p>No. Space tap is the default action, but adaptive action can learn a small safe key profile for each marked game when there are enough samples.</p>
+        </article>
+        <article class="faq-item">
+          <h3>What if nothing appears?</h3>
+          <p>Open the game window and press Rescan in Sightline. If it still does not appear, report it from About so the issue opens with the right template.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Does it need admin?</h3>
+          <p>The setup is per-user. If a target app runs elevated, Windows may block normal background input unless OMNAFK is running at the same level.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Where are settings kept?</h3>
+          <p>Settings, target marks, and learned profiles stay local on your machine. Import and export are available from Settings.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Is every game okay with this?</h3>
+          <p>Not always. Automated input may not be allowed by every game or platform. Use OMNAFK where it makes sense for you.</p>
         </article>
       </div>
     </div>
