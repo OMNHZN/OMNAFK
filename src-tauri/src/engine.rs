@@ -167,6 +167,8 @@ struct TrackedWindow {
     monitor_move_failures: u32,
     health: KeepaliveHealth,
     primary_keepalive: bool,
+    /// `GetLastInputInfo` tick from OMNAFK's last successful SendInput keepalive.
+    last_injected_input_tick: Option<u32>,
 }
 
 impl Engine {
@@ -305,12 +307,7 @@ impl Engine {
                 return;
             }
             let probe = Win32ActivityProbe;
-            let playing = probe
-                .last_input_age(Instant::now())
-                .is_some_and(|age| age <= Duration::from_millis(learn::ACTIVE_INPUT_MS));
-            if !playing {
-                return;
-            }
+            let now = Instant::now();
             probe.foreground_window().and_then(|foreground| {
                 inner
                     .windows
@@ -321,7 +318,15 @@ impl Engine {
                             && window.gone_since.is_none()
                             && inner.config.adaptive_enabled(&window.exe, &window.wclass)
                     })
-                    .map(|(identity, window)| (identity.clone(), window.title.clone()))
+                    .and_then(|(identity, window)| {
+                        keepalive::genuine_recent_user_input(
+                            now,
+                            &probe,
+                            Duration::from_millis(learn::ACTIVE_INPUT_MS),
+                            window.last_injected_input_tick,
+                        )
+                        .then(|| (identity.clone(), window.title.clone()))
+                    })
             })
         };
         let Some((identity, title)) = candidate else {
@@ -679,12 +684,13 @@ impl Engine {
             wclass: wclass_c,
         };
         match keepalive::send_keepalive(&target, &options) {
-            Ok(()) => {
+            Ok(injected_tick) => {
                 let now = Instant::now();
                 if let Some(window) = inner.windows.get_mut(&identity) {
                     window.actions = window.actions.saturating_add(1);
                     window.last_action_at = Some(now);
                     window.last_action_ok = Some(true);
+                    window.last_injected_input_tick = injected_tick;
                     window.health.note_success();
                 }
                 inner
@@ -861,6 +867,7 @@ impl EngineInner {
                     monitor_move_failures: 0,
                     health: KeepaliveHealth::default(),
                     primary_keepalive: true,
+                    last_injected_input_tick: None,
                 });
 
             if is_new && self.config.community_intelligence {
@@ -1205,6 +1212,10 @@ impl EngineInner {
                 exe: exe.clone(),
                 wclass,
             };
+            let ignore_input_tick = self
+                .windows
+                .get(&identity)
+                .and_then(|window| window.last_injected_input_tick);
 
             if gate.is_none() && elapsed > 0 {
                 self.stats.note_kept(&identity, &title, elapsed);
@@ -1214,7 +1225,7 @@ impl EngineInner {
             }
             self.stats.note_seen_today(&identity);
 
-            if keepalive::should_hold(&target, &options, now, activity) {
+            if keepalive::should_hold(&target, &options, now, activity, ignore_input_tick) {
                 holding = true;
             }
 
@@ -1225,7 +1236,14 @@ impl EngineInner {
                 continue;
             };
 
-            match keepalive::tick_decision(timer, &target, &options, now, activity) {
+            match keepalive::tick_decision(
+                timer,
+                &target,
+                &options,
+                now,
+                activity,
+                ignore_input_tick,
+            ) {
                 TickDecision::Waiting => {}
                 TickDecision::Held => {
                     holding = true;
@@ -1241,11 +1259,12 @@ impl EngineInner {
                 }
                 TickDecision::Send => {
                     match keepalive::send_keepalive(&target, &options) {
-                        Ok(()) => {
+                        Ok(injected_tick) => {
                             let first = window.actions == 0;
                             window.actions = window.actions.saturating_add(1);
                             window.last_action_at = Some(now);
                             window.last_action_ok = Some(true);
+                            window.last_injected_input_tick = injected_tick;
                             window.health.note_success();
                             self.stats
                                 .note_action_result(&identity, &title, &label, true);

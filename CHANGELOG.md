@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.11
+
+- Fixed play-aware holding so OMNAFK's own keepalive input is not mistaken for real player input.
+- Made SendInput keepalive actions use paced press and release events for steadier behavior in more games.
+- Kept adaptive learning focused on real user input after an OMNAFK tick.
+- Split the bottom status bar into state text and next-tick time so active targets read more cleanly.
+
 ## v0.1.10
 
 - Made Sightline the default opening tab so detected windows are visible first.

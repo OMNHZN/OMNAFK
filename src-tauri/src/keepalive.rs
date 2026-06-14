@@ -32,7 +32,9 @@ use windows::Win32::{
 
 const KEY_SPACE: u16 = 0x20;
 const KEY_W: u16 = 0x57;
-const KEY_HOLD_BASE_MS: u64 = 25;
+const KEY_HOLD_BASE_MS: u64 = 50;
+const MOUSE_STEP_MS: u64 = 25;
+const FOCUS_SETTLE_MS: u64 = 80;
 
 #[derive(Debug, Clone)]
 pub struct KeepaliveOptions {
@@ -111,6 +113,9 @@ pub enum TickDecision {
 pub trait ActivityProbe {
     fn foreground_window(&self) -> Option<isize>;
     fn last_input_age(&self, now: Instant) -> Option<Duration>;
+    fn last_input_tick(&self) -> Option<u32> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
@@ -123,20 +128,24 @@ impl ActivityProbe for Win32ActivityProbe {
     }
 
     fn last_input_age(&self, _now: Instant) -> Option<Duration> {
-        let mut info = LASTINPUTINFO {
-            cbSize: size_of::<LASTINPUTINFO>() as u32,
-            dwTime: 0,
-        };
-
-        let ok = unsafe { GetLastInputInfo(&mut info).as_bool() };
-        if !ok {
-            return None;
-        }
-
-        let now = unsafe { GetTickCount64() };
-        let elapsed = now.saturating_sub(info.dwTime as u64);
-        Some(Duration::from_millis(elapsed))
+        last_input_tick().map(|tick| {
+            let now = unsafe { GetTickCount64() };
+            Duration::from_millis(now.saturating_sub(tick as u64))
+        })
     }
+
+    fn last_input_tick(&self) -> Option<u32> {
+        last_input_tick()
+    }
+}
+
+/// Raw `GetLastInputInfo` tick — used to distinguish OMNAFK injections from real user input.
+pub fn last_input_tick() -> Option<u32> {
+    let mut info = LASTINPUTINFO {
+        cbSize: size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    unsafe { GetLastInputInfo(&mut info).as_bool() }.then_some(info.dwTime)
 }
 
 pub fn tick_decision(
@@ -145,12 +154,13 @@ pub fn tick_decision(
     options: &KeepaliveOptions,
     now: Instant,
     activity: &dyn ActivityProbe,
+    ignore_input_tick: Option<u32>,
 ) -> TickDecision {
     if !timer.due(now) {
         return TickDecision::Waiting;
     }
 
-    if should_hold(target, options, now, activity) {
+    if should_hold(target, options, now, activity, ignore_input_tick) {
         TickDecision::Held
     } else {
         TickDecision::Send
@@ -162,19 +172,49 @@ pub fn should_hold(
     options: &KeepaliveOptions,
     now: Instant,
     activity: &dyn ActivityProbe,
+    ignore_input_tick: Option<u32>,
 ) -> bool {
-    recent_user_input(options, now, activity)
+    recent_user_input(options, now, activity, ignore_input_tick)
 }
 
+/// True when the user (not OMNAFK) recently gave keyboard/mouse input.
 pub fn recent_user_input(
     options: &KeepaliveOptions,
     now: Instant,
     activity: &dyn ActivityProbe,
+    ignore_input_tick: Option<u32>,
 ) -> bool {
     options.hold_while_playing
-        && activity
-            .last_input_age(now)
-            .is_some_and(|age| age <= Duration::from_secs(options.hold_window_secs.max(1)))
+        && genuine_recent_user_input(
+            now,
+            activity,
+            Duration::from_secs(options.hold_window_secs.max(1)),
+            ignore_input_tick,
+        )
+}
+
+/// Recent input that is not solely OMNAFK's last injected tick.
+pub fn genuine_recent_user_input(
+    now: Instant,
+    activity: &dyn ActivityProbe,
+    max_age: Duration,
+    ignore_input_tick: Option<u32>,
+) -> bool {
+    let Some(age) = activity.last_input_age(now) else {
+        return false;
+    };
+    if age > max_age {
+        return false;
+    }
+    if let Some(ignored) = ignore_input_tick {
+        if activity
+            .last_input_tick()
+            .is_some_and(|tick| tick == ignored)
+        {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn next_delay(
@@ -246,20 +286,30 @@ pub fn delivery_strategy(target_hwnd: isize, foreground_hwnd: Option<isize>) -> 
 pub fn send_keepalive(
     target: &KeepaliveTarget,
     options: &KeepaliveOptions,
-) -> Result<(), KeepaliveError> {
+) -> Result<Option<u32>, KeepaliveError> {
     let hold_ms = key_hold_ms(options.randomize);
     let foreground = current_foreground_hwnd();
 
     if options.send_without_focus {
         // Expert opt-in: background PostMessage only. Most games ignore this.
-        return post_action(target, &options.action, hold_ms);
+        post_action(target, &options.action, hold_ms)?;
+        return Ok(None);
     }
 
     match delivery_strategy(target.hwnd, foreground) {
-        DeliveryStrategy::DirectSendInput => send_input_action(&options.action, &target.exe),
-        DeliveryStrategy::FocusFlick => focus_flick_action(target, &options.action),
-        DeliveryStrategy::PostMessage => post_action(target, &options.action, hold_ms),
+        DeliveryStrategy::DirectSendInput => {
+            send_input_action(&options.action, &target.exe, hold_ms)?;
+        }
+        DeliveryStrategy::FocusFlick => {
+            focus_flick_action(target, &options.action, hold_ms)?;
+        }
+        DeliveryStrategy::PostMessage => {
+            post_action(target, &options.action, hold_ms)?;
+            return Ok(None);
+        }
     }
+
+    Ok(last_input_tick())
 }
 
 fn current_foreground_hwnd() -> Option<isize> {
@@ -270,7 +320,7 @@ fn current_foreground_hwnd() -> Option<isize> {
 /// Vary the down->up delay so taps don't look machine-perfect.
 fn key_hold_ms(randomize: bool) -> u64 {
     if randomize {
-        rand::thread_rng().gen_range(30..=80)
+        rand::thread_rng().gen_range(50..=120)
     } else {
         KEY_HOLD_BASE_MS
     }
@@ -352,6 +402,7 @@ fn post_action(
 fn focus_flick_action(
     target: &KeepaliveTarget,
     action: &ResolvedAction,
+    hold_ms: u64,
 ) -> Result<(), KeepaliveError> {
     let target_hwnd = hwnd_from_isize(target.hwnd);
     let previous = unsafe { GetForegroundWindow() };
@@ -360,8 +411,8 @@ fn focus_flick_action(
         return Err(KeepaliveError::admin_hint(&target.exe));
     }
 
-    thread::sleep(Duration::from_millis(50));
-    let result = send_input_action(action, &target.exe);
+    thread::sleep(Duration::from_millis(FOCUS_SETTLE_MS));
+    let result = send_input_action(action, &target.exe, hold_ms);
 
     if !previous.is_invalid() && previous != target_hwnd {
         unsafe {
@@ -414,46 +465,64 @@ fn post_mouse_wheel(hwnd: HWND, delta: i16, exe: &str) -> Result<(), KeepaliveEr
     }
 }
 
-fn send_input_action(action: &ResolvedAction, exe: &str) -> Result<(), KeepaliveError> {
-    let inputs = match action {
-        ResolvedAction::SpaceTap => key_inputs(KEY_SPACE),
-        ResolvedAction::WTap => key_inputs(KEY_W),
-        ResolvedAction::CameraNudge => vec![mouse_input(2, 0), mouse_input(-2, 0)],
-        ResolvedAction::MouseWiggle => vec![mouse_input(1, 1), mouse_input(-1, -1)],
-        ResolvedAction::ScrollTick => vec![
-            wheel_input(WHEEL_DELTA as i32),
-            wheel_input(-(WHEEL_DELTA as i32)),
-        ],
-        ResolvedAction::RightClick => vec![
-            mouse_button_input(MOUSEEVENTF_RIGHTDOWN),
-            mouse_button_input(MOUSEEVENTF_RIGHTUP),
-        ],
-        ResolvedAction::KeySequence(keys) => keys
-            .iter()
-            .flat_map(|key| key_name_to_vk(key).map(key_inputs).unwrap_or_default())
-            .collect(),
-    };
-
-    if inputs.is_empty() {
-        return Err(KeepaliveError {
-            message: "Couldn't send key sequence - record supported keys in Settings to fix this."
-                .to_string(),
-        });
+fn send_input_action(
+    action: &ResolvedAction,
+    exe: &str,
+    hold_ms: u64,
+) -> Result<(), KeepaliveError> {
+    match action {
+        ResolvedAction::SpaceTap => send_key_tap(KEY_SPACE, exe, hold_ms),
+        ResolvedAction::WTap => send_key_tap(KEY_W, exe, hold_ms),
+        ResolvedAction::CameraNudge => {
+            send_single_input(&mouse_input(2, 0), exe)?;
+            thread::sleep(Duration::from_millis(MOUSE_STEP_MS));
+            send_single_input(&mouse_input(-2, 0), exe)
+        }
+        ResolvedAction::MouseWiggle => {
+            send_single_input(&mouse_input(1, 1), exe)?;
+            thread::sleep(Duration::from_millis(MOUSE_STEP_MS));
+            send_single_input(&mouse_input(-1, -1), exe)
+        }
+        ResolvedAction::ScrollTick => {
+            send_single_input(&wheel_input(WHEEL_DELTA as i32), exe)?;
+            thread::sleep(Duration::from_millis(MOUSE_STEP_MS));
+            send_single_input(&wheel_input(-(WHEEL_DELTA as i32)), exe)
+        }
+        ResolvedAction::RightClick => {
+            send_single_input(&mouse_button_input(MOUSEEVENTF_RIGHTDOWN), exe)?;
+            thread::sleep(Duration::from_millis(hold_ms));
+            send_single_input(&mouse_button_input(MOUSEEVENTF_RIGHTUP), exe)
+        }
+        ResolvedAction::KeySequence(keys) => {
+            for (index, key) in keys.iter().enumerate() {
+                let vk = key_name_to_vk(key).ok_or_else(|| KeepaliveError {
+                    message: format!(
+                        "Couldn't send key sequence - record supported keys in Settings to fix this: unsupported key '{key}'."
+                    ),
+                })?;
+                send_key_tap(vk, exe, hold_ms)?;
+                if index + 1 < keys.len() {
+                    thread::sleep(Duration::from_millis(MOUSE_STEP_MS));
+                }
+            }
+            Ok(())
+        }
     }
+}
 
-    let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
-    if sent == inputs.len() as u32 {
+fn send_key_tap(vk: u16, exe: &str, hold_ms: u64) -> Result<(), KeepaliveError> {
+    send_single_input(&key_input(vk, KEYBD_EVENT_FLAGS(0)), exe)?;
+    thread::sleep(Duration::from_millis(hold_ms));
+    send_single_input(&key_input(vk, KEYEVENTF_KEYUP), exe)
+}
+
+fn send_single_input(input: &INPUT, exe: &str) -> Result<(), KeepaliveError> {
+    let sent = unsafe { SendInput(std::slice::from_ref(input), size_of::<INPUT>() as i32) };
+    if sent == 1 {
         Ok(())
     } else {
         Err(KeepaliveError::admin_hint(exe))
     }
-}
-
-fn key_inputs(vk: u16) -> Vec<INPUT> {
-    vec![
-        key_input(vk, KEYBD_EVENT_FLAGS(0)),
-        key_input(vk, KEYEVENTF_KEYUP),
-    ]
 }
 
 fn key_input(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
@@ -553,6 +622,7 @@ mod tests {
     struct FakeActivity {
         foreground: Option<isize>,
         last_input_at: Option<Instant>,
+        input_tick: Option<u32>,
     }
 
     impl ActivityProbe for FakeActivity {
@@ -562,6 +632,10 @@ mod tests {
 
         fn last_input_age(&self, now: Instant) -> Option<Duration> {
             self.last_input_at.map(|last| now.duration_since(last))
+        }
+
+        fn last_input_tick(&self) -> Option<u32> {
+            self.input_tick
         }
     }
 
@@ -640,19 +714,50 @@ mod tests {
         let recent = FakeActivity {
             foreground: Some(target.hwnd),
             last_input_at: Some(now - Duration::from_secs(30)),
+            input_tick: Some(1000),
         };
-        assert!(should_hold(&target, &options, now, &recent));
+        assert!(should_hold(&target, &options, now, &recent, None));
 
         let stale = FakeActivity {
             foreground: Some(target.hwnd),
             last_input_at: Some(now - Duration::from_secs(61)),
+            input_tick: Some(1000),
         };
-        assert!(!should_hold(&target, &options, now, &stale));
+        assert!(!should_hold(&target, &options, now, &stale, None));
 
         let other_window = FakeActivity {
             foreground: Some(11),
             last_input_at: Some(now - Duration::from_secs(10)),
+            input_tick: Some(2000),
         };
-        assert!(should_hold(&target, &options, now, &other_window));
+        assert!(should_hold(&target, &options, now, &other_window, None));
+
+        // OMNAFK's own injection tick must not trigger hold.
+        let self_injected = FakeActivity {
+            foreground: Some(target.hwnd),
+            last_input_at: Some(now - Duration::from_millis(500)),
+            input_tick: Some(4242),
+        };
+        assert!(!should_hold(
+            &target,
+            &options,
+            now,
+            &self_injected,
+            Some(4242)
+        ));
+
+        // Real user input after OMNAFK send uses a newer tick.
+        let user_after_inject = FakeActivity {
+            foreground: Some(target.hwnd),
+            last_input_at: Some(now - Duration::from_millis(200)),
+            input_tick: Some(5000),
+        };
+        assert!(should_hold(
+            &target,
+            &options,
+            now,
+            &user_after_inject,
+            Some(4242)
+        ));
     }
 }
