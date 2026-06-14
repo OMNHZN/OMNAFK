@@ -223,16 +223,48 @@ pub fn session_locked() -> bool {
     }
 }
 
+/// How keepalive input reaches the game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryStrategy {
+    /// Target is already foreground — inject with `SendInput` (no focus change).
+    DirectSendInput,
+    /// Target is in the background — brief focus flick, then `SendInput`.
+    FocusFlick,
+    /// Legacy background `PostMessage` path (opt-in only; many games ignore it).
+    PostMessage,
+}
+
+/// Pick the delivery path for a target HWND vs the current foreground window.
+pub fn delivery_strategy(target_hwnd: isize, foreground_hwnd: Option<isize>) -> DeliveryStrategy {
+    if foreground_hwnd == Some(target_hwnd) {
+        DeliveryStrategy::DirectSendInput
+    } else {
+        DeliveryStrategy::FocusFlick
+    }
+}
+
 pub fn send_keepalive(
     target: &KeepaliveTarget,
     options: &KeepaliveOptions,
 ) -> Result<(), KeepaliveError> {
     let hold_ms = key_hold_ms(options.randomize);
+    let foreground = current_foreground_hwnd();
+
     if options.send_without_focus {
-        post_action(target, &options.action, hold_ms)
-    } else {
-        focus_flick_action(target, &options.action)
+        // Expert opt-in: background PostMessage only. Most games ignore this.
+        return post_action(target, &options.action, hold_ms);
     }
+
+    match delivery_strategy(target.hwnd, foreground) {
+        DeliveryStrategy::DirectSendInput => send_input_action(&options.action, &target.exe),
+        DeliveryStrategy::FocusFlick => focus_flick_action(target, &options.action),
+        DeliveryStrategy::PostMessage => post_action(target, &options.action, hold_ms),
+    }
+}
+
+fn current_foreground_hwnd() -> Option<isize> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    (!hwnd.is_invalid()).then_some(hwnd.0 as isize)
 }
 
 /// Vary the down->up delay so taps don't look machine-perfect.
@@ -539,7 +571,7 @@ mod tests {
             randomize: true,
             jitter_pct: 15,
             action: ResolvedAction::SpaceTap,
-            send_without_focus: true,
+            send_without_focus: false,
             hold_while_playing: true,
             hold_window_secs: 60,
         }
@@ -584,6 +616,19 @@ mod tests {
 
         timer.reschedule(now + Duration::from_secs(540), &options, &mut rng);
         assert_eq!(timer.seconds_until(now + Duration::from_secs(540)), 540);
+    }
+
+    #[test]
+    fn delivery_strategy_prefers_direct_input_when_target_is_foreground() {
+        assert_eq!(
+            delivery_strategy(42, Some(42)),
+            DeliveryStrategy::DirectSendInput
+        );
+        assert_eq!(
+            delivery_strategy(42, Some(99)),
+            DeliveryStrategy::FocusFlick
+        );
+        assert_eq!(delivery_strategy(42, None), DeliveryStrategy::FocusFlick);
     }
 
     #[test]

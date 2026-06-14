@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.9
+
+- Changed the default keepalive delivery to real keyboard and mouse input for better game compatibility.
+- Renamed the legacy background-message option to Background-only mode.
+- Added a one-time migration from the old background delivery default while keeping the expert toggle persistent afterward.
+- Updated fallback wording around camera nudge and mouse wiggle recovery.
+
 ## v0.1.8
 
 - Added opt-in community game profiles for shared detection hints and keepalive settings.

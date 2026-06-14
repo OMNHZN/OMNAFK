@@ -46,17 +46,17 @@ impl KeepaliveHealth {
         self.fallback_tier = self.fallback_tier.next(auto_fallback);
         if self.fallback_tier == previous {
             return Some(
-                "Keepalives keep failing — try a different action, focus-flick mode, or run OMNAFK as administrator."
+                "Keepalives keep failing — try a different action or run OMNAFK as administrator."
                     .to_string(),
             );
         }
         Some(
             match self.fallback_tier {
                 FallbackTier::FocusFlick => {
-                    "Keepalives failing — switching to brief focus flick for this game."
+                    "Keepalives failing — trying camera nudge for this game."
                 }
                 FallbackTier::CameraNudge => {
-                    "Keepalives still failing — trying camera nudge for this game."
+                    "Keepalives still failing — trying mouse wiggle for this game."
                 }
                 FallbackTier::Normal => return None,
             }
@@ -70,9 +70,9 @@ impl KeepaliveHealth {
                 "Keepalive failing ({}x) — {}",
                 self.consecutive_failures,
                 match self.fallback_tier {
-                    FallbackTier::Normal => "try focus-flick or another action",
-                    FallbackTier::FocusFlick => "using focus flick",
-                    FallbackTier::CameraNudge => "using camera nudge",
+                    FallbackTier::Normal => "try another action or run as administrator",
+                    FallbackTier::FocusFlick => "using camera nudge",
+                    FallbackTier::CameraNudge => "using mouse wiggle",
                 }
             ))
         } else if self.consecutive_failures > 0 {
@@ -88,12 +88,12 @@ impl KeepaliveHealth {
     pub fn apply_to_options(
         &self,
         action: &ResolvedAction,
-        send_without_focus: bool,
+        _send_without_focus: bool,
     ) -> (ResolvedAction, bool) {
         match self.fallback_tier {
-            FallbackTier::Normal => (action.clone(), send_without_focus),
-            FallbackTier::FocusFlick => (action.clone(), false),
-            FallbackTier::CameraNudge => (ResolvedAction::CameraNudge, send_without_focus),
+            FallbackTier::Normal => (action.clone(), false),
+            FallbackTier::FocusFlick => (ResolvedAction::CameraNudge, false),
+            FallbackTier::CameraNudge => (ResolvedAction::MouseWiggle, false),
         }
     }
 }

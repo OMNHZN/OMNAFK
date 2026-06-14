@@ -220,6 +220,7 @@ pub struct AppConfig {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
+    pub background_delivery_migrated: bool,
     pub hold_while_playing: bool,
     pub hold_window_secs: u64,
     pub idle_threshold_mins: u64,
@@ -333,7 +334,8 @@ impl Default for AppConfig {
             action: KeepaliveAction::SpaceTap,
             adaptive_actions: true,
             key_sequence: Vec::new(),
-            send_without_focus: true,
+            send_without_focus: false,
+            background_delivery_migrated: true,
             hold_while_playing: true,
             hold_window_secs: 60,
             idle_threshold_mins: 0,
@@ -398,6 +400,20 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    /// One-time migrations for saved settings. Returns true when the file should be rewritten.
+    pub fn migrate(&mut self) -> bool {
+        let mut changed = false;
+        // Older builds defaulted to PostMessage background delivery, which most games ignore.
+        if !self.background_delivery_migrated {
+            if self.send_without_focus {
+                self.send_without_focus = false;
+            }
+            self.background_delivery_migrated = true;
+            changed = true;
+        }
+        changed
+    }
+
     pub fn override_for(&self, exe: &str, wclass: &str) -> Option<OverrideVerdict> {
         self.overrides
             .get(&identity_exe_key(exe))
@@ -656,11 +672,16 @@ pub fn save(config: &AppConfig) -> io::Result<()> {
 }
 
 pub fn load_from_path(path: &Path) -> io::Result<AppConfig> {
-    match fs::read_to_string(path) {
-        Ok(raw) => serde_json::from_str(&raw).map_err(invalid_config),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(AppConfig::default()),
-        Err(error) => Err(error),
+    let mut config: AppConfig = match fs::read_to_string(path) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(invalid_config)?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(AppConfig::default()),
+        Err(error) => return Err(error),
+    };
+    let migrated = config.migrate();
+    if migrated {
+        let _ = save_to_path(&config, path);
     }
+    Ok(config)
 }
 
 pub fn save_to_path(config: &AppConfig, path: &Path) -> io::Result<()> {
@@ -767,7 +788,7 @@ mod tests {
         assert_eq!(config.action, KeepaliveAction::SpaceTap);
         assert!(config.adaptive_actions);
         assert!(config.key_sequence.is_empty());
-        assert!(config.send_without_focus);
+        assert!(!config.send_without_focus);
         assert!(config.hold_while_playing);
         assert!(!config.manual_mode);
         assert_eq!(config.sensitivity, Sensitivity::Standard);
@@ -794,6 +815,29 @@ mod tests {
         assert!(!config.first_run_notified);
         assert!(config.overrides.is_empty());
         assert!(config.profiles.is_empty());
+    }
+
+    #[test]
+    fn migrate_clears_legacy_background_only_default() {
+        let mut config = AppConfig {
+            send_without_focus: true,
+            background_delivery_migrated: false,
+            ..AppConfig::default()
+        };
+        assert!(config.migrate());
+        assert!(!config.send_without_focus);
+        assert!(!config.migrate());
+    }
+
+    #[test]
+    fn migrate_keeps_explicit_background_only_after_marker_is_set() {
+        let mut config = AppConfig {
+            send_without_focus: true,
+            background_delivery_migrated: true,
+            ..AppConfig::default()
+        };
+        assert!(!config.migrate());
+        assert!(config.send_without_focus);
     }
 
     #[test]

@@ -13,7 +13,7 @@ pub fn apply_preset(config: &mut AppConfig, name: &str) -> Result<(), String> {
             config.adaptive_min_samples = 50;
             config.adaptive_learn_sequences = true;
             config.adaptive_learn_actions = true;
-            config.send_without_focus = true;
+            config.send_without_focus = false;
             config.hold_while_playing = true;
             config.auto_fallback = true;
             config.monitor_style = MonitorStyle::Preserve;
@@ -25,7 +25,7 @@ pub fn apply_preset(config: &mut AppConfig, name: &str) -> Result<(), String> {
             config.adaptive_min_samples = 30;
             config.adaptive_learn_sequences = true;
             config.adaptive_learn_actions = true;
-            config.send_without_focus = true;
+            config.send_without_focus = false;
             config.hold_while_playing = true;
             config.auto_fallback = true;
         }
@@ -33,7 +33,7 @@ pub fn apply_preset(config: &mut AppConfig, name: &str) -> Result<(), String> {
             config.interval = 180;
             config.action = KeepaliveAction::CameraNudge;
             config.adaptive_actions = false;
-            config.send_without_focus = true;
+            config.send_without_focus = false;
             config.hold_while_playing = false;
             config.auto_fallback = true;
         }
