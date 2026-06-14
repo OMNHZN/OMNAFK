@@ -35,11 +35,11 @@ Modules: `detector.rs`, `keepalive.rs`, `config.rs`.
   (`GetForegroundWindow` + `GetLastInputInfo` heuristic).
 - Log every verdict and every tick at `info`.
 
-**Accept:** with Roblox running, engine logs `GAME` for it and `IGNORED` for the
-browser/IDE, ticks fire on schedule, Roblox's 20-minute idle kick does not occur
+**Accept:** with a known game running (e.g. GTA V or a platform title), engine logs `GAME` for it and `IGNORED` for the
+browser/IDE, ticks fire on schedule, and the game's idle kick does not occur
 over a 30-minute unattended run. Score function has unit tests covering: fullscreen
-game, borderless game, browser, video player, Steam-path exe. PostMessage path
-verified on Roblox; focus-flick verified on at least one game that ignores
+game, borderless game, browser, video player, Steam-path exe. SendInput path
+verified on multiple titles; focus-flick verified on at least one game that ignores
 PostMessage.
 
 ## Phase 2 — Tray + flyout shell

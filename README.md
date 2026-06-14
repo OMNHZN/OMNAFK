@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>A quiet Windows tray watcher for game keepalives.</strong>
+  <strong>A quiet Windows tray watcher that keeps any game awake.</strong>
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 ## What It Does
 
-OMNAFK watches your visible windows, marks the ones that look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. Install it, launch a game, and it handles the rest — including restarting elevated when a game requires it.
+OMNAFK watches your visible windows, marks the ones that look like games, and keeps **any game** awake without asking you to babysit another control panel. There is no arm button and no start button. Install it, launch a game, and it handles the rest — including restarting elevated when a game requires it.
 
 ## Highlights
 
@@ -37,7 +37,7 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Target details explain why a window was marked and show adaptive action progress.
 - Sends real keyboard/mouse input (`SendInput`) so keepalives work in virtually every game.
 - Restarts elevated automatically when a game runs as administrator (UAC prompt once).
-- Ships built-in profiles for common games (GTA V, Roblox, Minecraft, and more).
+- Ships built-in profiles for dozens of games (GTA V, Minecraft, Fortnite, Valorant, CS2, platform titles, and more).
 - Learns your movement keys quickly (20 samples) and switches to adaptive keepalives per game.
 - Community intelligence on by default for crowd-sourced detection hints and proven settings.
 - Skips ticks while there is recent user input, so it stays out of your way while you are playing.

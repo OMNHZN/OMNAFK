@@ -3,7 +3,9 @@
 ## v0.1.10
 
 - Made Sightline the default opening tab so detected windows are visible first.
-- Added zero-setup game hints for common titles, including Roblox, GTA V, Minecraft, Fortnite, Valorant, and CS2.
+- Added zero-setup game hints for common titles, including GTA V, Minecraft, Fortnite, Valorant, CS2, and other platform games.
+- Renamed the old **Roblox** quick preset to **Long interval (Space)** and reordered presets by behavior, not game title.
+- Updated README and docs copy to describe OMNAFK as a universal game keepalive tool.
 - Lowered the adaptive learning threshold to 20 samples and switched the default keepalive action to W tap.
 - Added automatic elevation prompts for administrator-run games, with a Settings toggle to turn that behavior off.
 - Reorganized Keepalive, Stats, and Settings details so daily controls stay easier to scan.

@@ -184,7 +184,7 @@ Lifetime statistics persist separately in `stats.json` next to the config.
 | `list_monitors` | — | Return connected displays: `[{ device, label, primary, width, height }]`. |
 | `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor?, adaptive? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. `adaptive: null` uses global adaptive toggle; `true`/`false` overrides per target. Emit state. |
 | `move_target` | `{ exe, wclass }` | Move one tracked window onto its configured monitor immediately. Emit state. |
-| `apply_preset` | `{ name }` | Apply a named preset (`Roblox`, `Walking simulator`, `Camera AFK`). Persist. Emit state. |
+| `apply_preset` | `{ name }` | Apply a named preset (`Walking simulator`, `Long interval (Space)`, `Camera AFK`). Legacy alias `Roblox` maps to Long interval (Space). Persist. Emit state. |
 | `list_presets` | — | Return available preset names. |
 | `restart_as_admin` | — | Relaunch OMNAFK elevated via UAC, then exit the current instance. |
 | `rescan` | — | Force immediate detection pass. Emit state. |

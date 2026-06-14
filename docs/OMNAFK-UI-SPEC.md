@@ -4,7 +4,7 @@ A universal anti-AFK utility for Windows. Keeps any game or application "alive" 
 
 This document is the single source of truth for the UI. Anyone implementing OMNAFK (Win32, WinUI, Qt, Electron, Tauri, web mockup, etc.) should be able to reproduce the interface from this spec alone, pixel-for-pixel in intent if not in literal pixels.
 
-**Design lineage:** Inspired by the layout language of AntiAFK-RBX v3.2 (compact single window, icon tab strip, label+control rows with inline help, status bar) — re-skinned as a pure-black AMOLED monochrome theme and generalized from Roblox-only to any process.
+**Design lineage:** Compact tray-flyout layout (icon tab strip, label+control rows, status bar) on a pure-black AMOLED monochrome theme — built as a **universal keepalive utility for any game or app window**, not a single-title tool.
 
 ---
 
@@ -259,7 +259,7 @@ OMNAFK continuously classifies visible top-level windows. A window is judged a *
 - Fullscreen or borderless-fullscreen window covering a monitor's work area
 - Process has a swapchain / renders via DirectX, Vulkan, or OpenGL (loaded `d3d11.dll`, `d3d12.dll`, `vulkan-1.dll`, `opengl32.dll`…)
 - Sustained GPU utilization attributable to the process
-- Launched from a known game platform path (`steamapps\common`, Epic, Riot, Xbox, `Roblox`…) or by a launcher process
+- Launched from a known game platform path (`steamapps\common`, Epic, Riot, Xbox, etc.) or by a launcher process
 - Raw-input / DirectInput / XInput device registration
 - Negative signals: browser, IDE, office, and media-player window classes are down-weighted
 
