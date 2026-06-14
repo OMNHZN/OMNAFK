@@ -60,6 +60,7 @@ pub struct ConfigPayload {
     pub burst_detection: bool,
     pub headless: bool,
     pub community_intelligence: bool,
+    pub auto_elevate: bool,
     pub always_mark_exes: Vec<String>,
     pub key_sequence: Vec<String>,
     pub send_without_focus: bool,
@@ -137,6 +138,7 @@ impl From<&AppConfig> for ConfigPayload {
             burst_detection: config.burst_detection,
             headless: config.headless,
             community_intelligence: config.community_intelligence,
+            auto_elevate: config.auto_elevate,
             always_mark_exes: config.always_mark_exes.clone(),
             key_sequence: config.key_sequence.clone(),
             send_without_focus: config.send_without_focus,
@@ -220,6 +222,13 @@ pub fn move_target(
 pub fn restart_as_admin(app: AppHandle, engine: State<'_, SharedEngine>) -> Result<(), String> {
     if crate::detector::current_process_elevated() {
         return Err("OMNAFK is already running as administrator.".to_string());
+    }
+    restart_elevated(&app, &engine)
+}
+
+pub fn restart_elevated(app: &AppHandle, engine: &SharedEngine) -> Result<(), String> {
+    if crate::detector::current_process_elevated() {
+        return Ok(());
     }
     let exe = std::env::current_exe().map_err(|error| {
         format!("Couldn't locate OMNAFK - reinstall the app to fix this: {error}")
@@ -794,6 +803,12 @@ pub fn spawn_state_pump(app: AppHandle, engine: SharedEngine) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
 
+        if engine.take_pending_elevation() {
+            if let Err(error) = restart_elevated(&app, &engine) {
+                tracing::warn!("Auto-elevation failed: {error}");
+            }
+        }
+
         // Surface engine notices as Windows toasts regardless of flyout visibility.
         for notice in engine.take_notices() {
             if let Err(error) = app
@@ -922,6 +937,7 @@ fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Result
                 crate::community::ensure_client_id(config);
             }
         }
+        "auto_elevate" => config.auto_elevate = bool_value(value, key)?,
         "adaptive_min_samples" => {
             let samples = value.as_u64().ok_or_else(|| {
                 "Couldn't set adaptive sample threshold - choose a number to fix this.".to_string()

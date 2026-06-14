@@ -187,7 +187,7 @@
     </section>
     <div class="quick">
       <span>Windows 10 / 11</span>
-      <span>Stable v0.1.9</span>
+      <span>Stable v0.1.10</span>
       <a href="https://github.com/OMNHZN/OMNAFK/releases">Releases</a>
       <a href="https://github.com/OMNHZN/OMNAFK">Source code</a>
     </div>
@@ -204,7 +204,7 @@
         </article>
         <article class="feature">
           <h3>QUIET INPUT</h3>
-          <p>Keepalives use background window messages by default, so the app avoids stealing focus from what you are doing.</p>
+          <p>Keepalives use real keyboard and mouse input by default, then hold when you are actively playing so the app stays out of your way.</p>
         </article>
         <article class="feature">
           <h3>ADAPTIVE ACTIONS</h3>
@@ -225,9 +225,9 @@
       <p class="intro">OMNAFK lives in the tray, but the flyout gives you the controls that matter: timing, targets, updates, and diagnostics.</p>
       <div class="app-grid">
         <article class="shot">
-          <img src="assets/app-general.png" alt="OMNAFK General tab">
-          <h3>GENERAL</h3>
-          <p>Set the keepalive interval, action, random timing, monitor placement, and play-aware pause behavior from the first tab.</p>
+          <img src="assets/app-general.png" alt="OMNAFK Keepalive tab">
+          <h3>KEEPALIVE</h3>
+          <p>Set the interval, action, play-aware holds, recovery behavior, and monitor placement from one organized tab.</p>
         </article>
         <article class="shot">
           <img src="assets/app-sightline.png" alt="OMNAFK Sightline tab">
@@ -237,7 +237,7 @@
         <article class="shot">
           <img src="assets/app-settings.png" alt="OMNAFK Settings tab">
           <h3>SETTINGS</h3>
-          <p>Control launch behavior, notifications, detection sensitivity, update checks, and import/export.</p>
+          <p>Control launch behavior, notifications, detection sensitivity, elevation prompts, update checks, and import/export.</p>
         </article>
         <article class="shot">
           <img src="assets/app-about.png" alt="OMNAFK About tab">
@@ -264,9 +264,9 @@
           <ul class="guide-list">
             <li><b>Nothing shows up?</b> Open the game window, then press Rescan in Sightline.</li>
             <li><b>Wrong window marked?</b> Set it to ignored. OMNAFK remembers your choice.</li>
-            <li><b>Do not want focus stolen?</b> Keep Send without focus on. That is the default.</li>
+            <li><b>Do not want focus changes?</b> Leave Hold while I'm playing on. For expert cases, Background-only mode is available under Advanced.</li>
             <li><b>Playing right now?</b> Hold while I'm playing pauses sends after recent input.</li>
-            <li><b>Using more than one monitor?</b> Choose monitor placement in General, then override single targets from Sightline when needed.</li>
+            <li><b>Using more than one monitor?</b> Choose monitor placement in Keepalive, then override single targets from Sightline when needed.</li>
             <li><b>Need help?</b> Use Bug report from About so the report opens with the right template.</li>
           </ul>
         </article>
@@ -281,11 +281,11 @@
       <div class="faq-grid">
         <article class="faq-item">
           <h3>Does it steal focus?</h3>
-          <p>No. Send without focus is on by default, so keepalives use background window messages instead of pulling you away from what you are doing.</p>
+          <p>OMNAFK uses real input for better compatibility, but it holds sends while you are actively playing. If a background-only approach works for your game, the expert toggle is under Keepalive → Advanced.</p>
         </article>
         <article class="faq-item">
           <h3>Does it always press Space?</h3>
-          <p>No. Space tap is the default action, but adaptive action can learn a small safe key profile for each marked game when there are enough samples.</p>
+          <p>No. W tap is the default action, common games can use built-in hints, and adaptive action can learn a small safe key profile for each marked game when there are enough samples.</p>
         </article>
         <article class="faq-item">
           <h3>What if nothing appears?</h3>
@@ -293,15 +293,15 @@
         </article>
         <article class="faq-item">
           <h3>Does it need admin?</h3>
-          <p>The setup is per-user. If a target app runs elevated, Windows may block normal background input unless OMNAFK is running at the same level. Use <b>Restart as administrator</b> in Settings when Sightline shows the admin warning.</p>
+          <p>The setup is per-user. If a target app runs elevated, Windows may block normal input unless OMNAFK is running at the same level. OMNAFK can ask to restart elevated, and that prompt can be turned off in Settings.</p>
         </article>
         <article class="faq-item">
           <h3>What if keepalives keep failing?</h3>
-          <p>Sightline shows a health warning after repeated failures. Turn on <b>Auto-fallback</b> in General so OMNAFK tries focus-flick mode and then camera nudge for that game this session.</p>
+          <p>Sightline shows a health warning after repeated failures. Keep <b>Auto-fallback</b> on in Keepalive so OMNAFK can try another action for that game this session.</p>
         </article>
         <article class="faq-item">
           <h3>Can I force a game to be marked?</h3>
-          <p>Yes. Add its process name under <b>Always mark exes</b> in General → Advanced, or pin it manually in Sightline.</p>
+          <p>Yes. Add its process name under <b>Always mark exes</b> in Keepalive → Advanced, or pin it manually in Sightline.</p>
         </article>
         <article class="faq-item">
           <h3>Where are settings kept?</h3>
@@ -378,7 +378,7 @@
   </section>
 
   <footer>
-    <div class="wrap">v0.1.9 - MIT license - Windows 10/11 - Use at your own discretion</div>
+    <div class="wrap">v0.1.10 - MIT license - Windows 10/11 - Use at your own discretion</div>
   </footer>
 </body>
 </html>

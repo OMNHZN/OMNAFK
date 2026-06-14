@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-06-12",
+  "updated": "2026-06-14",
   "ingest_url": null,
   "games": {
     "robloxplayerbeta.exe": {
       "action": "Space tap",
       "interval": 540,
-      "send_without_focus": true,
+      "send_without_focus": false,
       "auto_fallback": true,
       "adaptive": true,
       "confidence": 0.95,
@@ -23,18 +23,35 @@
       "confidence": 0.9,
       "reports": 50,
       "fallback_order": ["FocusFlick", "CameraNudge"]
+    },
+    "gta5.exe": {
+      "action": "W tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.85,
+      "reports": 40,
+      "top_keys": ["W"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "status": "stable"
     }
   },
   "detection": {
     "known_exes": [
       "minecraft.windows.exe",
       "javaw.exe",
-      "league of legends.exe"
+      "league of legends.exe",
+      "gta5.exe",
+      "fortniteclient-win64-shipping.exe",
+      "valorant-win64-shipping.exe",
+      "cs2.exe"
     ],
     "path_patterns": [
       "steamapps\\common",
       "epic games\\",
-      "riot games\\"
+      "riot games\\",
+      "rockstar games\\"
     ],
     "negative_exes": [
       "discord.exe",

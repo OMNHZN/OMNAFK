@@ -277,6 +277,10 @@ pub struct AppConfig {
     pub community_client_id: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub community_dismissed_exes: Vec<String>,
+    #[serde(default = "default_true")]
+    pub auto_elevate: bool,
+    #[serde(default)]
+    pub zero_config_migrated: bool,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
@@ -331,11 +335,13 @@ impl Default for AppConfig {
             interval: 540,
             randomize: true,
             jitter_pct: 15,
-            action: KeepaliveAction::SpaceTap,
+            action: KeepaliveAction::WTap,
             adaptive_actions: true,
             key_sequence: Vec::new(),
             send_without_focus: false,
             background_delivery_migrated: true,
+            auto_elevate: true,
+            zero_config_migrated: true,
             hold_while_playing: true,
             hold_window_secs: 60,
             idle_threshold_mins: 0,
@@ -359,7 +365,7 @@ impl Default for AppConfig {
             check_updates_on_launch: false,
             ignored_update_tag: None,
             pinned: false,
-            last_tab: "general".to_string(),
+            last_tab: "targets".to_string(),
             settings_interface_collapsed: true,
             settings_updates_collapsed: false,
             general_advanced_collapsed: true,
@@ -379,13 +385,13 @@ impl Default for AppConfig {
             monitor_skip_active: true,
             monitor_skip_active_secs: 5,
             auto_fallback: true,
-            adaptive_min_samples: 50,
+            adaptive_min_samples: 20,
             adaptive_learn_sequences: true,
             adaptive_learn_actions: true,
             burst_detection: true,
             headless: false,
             always_mark_exes: Vec::new(),
-            community_intelligence: false,
+            community_intelligence: true,
             community_client_id: String::new(),
             community_dismissed_exes: Vec::new(),
             suspended: false,
@@ -411,7 +417,49 @@ impl AppConfig {
             self.background_delivery_migrated = true;
             changed = true;
         }
+        if !self.zero_config_migrated {
+            if self.action == KeepaliveAction::SpaceTap {
+                self.action = KeepaliveAction::WTap;
+            }
+            if self.adaptive_min_samples >= 50 {
+                self.adaptive_min_samples = 20;
+            }
+            self.community_intelligence = true;
+            self.auto_elevate = true;
+            self.zero_config_migrated = true;
+            changed = true;
+        }
         changed
+    }
+
+    /// Built-in keepalive hints for well-known game executables (no user setup required).
+    pub fn known_exe_keepalive(exe: &str) -> Option<ResolvedKeepalive> {
+        match identity_exe_key(exe).as_str() {
+            "robloxplayerbeta.exe" | "robloxplayer.exe" => Some(ResolvedKeepalive {
+                interval: 540,
+                action: ResolvedAction::SpaceTap,
+            }),
+            "gta5.exe" => Some(ResolvedKeepalive {
+                interval: 540,
+                action: ResolvedAction::WTap,
+            }),
+            "minecraft.windows.exe" | "javaw.exe" => Some(ResolvedKeepalive {
+                interval: 180,
+                action: ResolvedAction::WTap,
+            }),
+            "fortniteclient-win64-shipping.exe"
+            | "valorant-win64-shipping.exe"
+            | "cs2.exe"
+            | "csgo.exe"
+            | "eldenring.exe"
+            | "darksoulsiii.exe"
+            | "rocketleague.exe"
+            | "destiny2.exe" => Some(ResolvedKeepalive {
+                interval: 540,
+                action: ResolvedAction::WTap,
+            }),
+            _ => None,
+        }
     }
 
     pub fn override_for(&self, exe: &str, wclass: &str) -> Option<OverrideVerdict> {
@@ -478,7 +526,16 @@ impl AppConfig {
 
     pub fn resolve_keepalive(&self, exe: &str, wclass: &str) -> ResolvedKeepalive {
         let profile = self.profile_for(exe, wclass);
-        let interval = profile.and_then(|p| p.interval).unwrap_or(self.interval);
+        let known = Self::known_exe_keepalive(exe);
+        let interval = profile
+            .and_then(|p| p.interval)
+            .or_else(|| known.as_ref().map(|k| k.interval))
+            .unwrap_or(self.interval);
+
+        let per_target_fallback = known
+            .as_ref()
+            .map(|k| k.action.clone())
+            .unwrap_or(ResolvedAction::WTap);
 
         let action = match self.action {
             KeepaliveAction::PerTarget => profile
@@ -486,14 +543,12 @@ impl AppConfig {
                     p.action
                         .map(|a| resolved_from_target_action(a, &p.key_sequence))
                 })
-                .unwrap_or(ResolvedAction::SpaceTap),
+                .unwrap_or(per_target_fallback),
             KeepaliveAction::KeySequence => resolved_key_sequence(&self.key_sequence),
-            KeepaliveAction::SpaceTap => ResolvedAction::SpaceTap,
-            KeepaliveAction::WTap => ResolvedAction::WTap,
-            KeepaliveAction::CameraNudge => ResolvedAction::CameraNudge,
-            KeepaliveAction::MouseWiggle => ResolvedAction::MouseWiggle,
-            KeepaliveAction::ScrollTick => ResolvedAction::ScrollTick,
-            KeepaliveAction::RightClick => ResolvedAction::RightClick,
+            _ => known
+                .as_ref()
+                .map(|k| k.action.clone())
+                .unwrap_or_else(|| resolved_from_keepalive_action(self.action)),
         };
 
         ResolvedKeepalive { interval, action }
@@ -583,6 +638,22 @@ impl AppConfig {
 
     pub fn ignores_update(&self, tag: &str) -> bool {
         self.ignored_update_tag.as_deref() == Some(tag)
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+pub fn resolved_from_keepalive_action(action: KeepaliveAction) -> ResolvedAction {
+    match action {
+        KeepaliveAction::SpaceTap => ResolvedAction::SpaceTap,
+        KeepaliveAction::WTap => ResolvedAction::WTap,
+        KeepaliveAction::CameraNudge => ResolvedAction::CameraNudge,
+        KeepaliveAction::MouseWiggle => ResolvedAction::MouseWiggle,
+        KeepaliveAction::ScrollTick => ResolvedAction::ScrollTick,
+        KeepaliveAction::RightClick => ResolvedAction::RightClick,
+        KeepaliveAction::KeySequence | KeepaliveAction::PerTarget => ResolvedAction::WTap,
     }
 }
 
@@ -785,8 +856,12 @@ mod tests {
         assert!(config.general_advanced_collapsed);
         assert!(!config.tour_done);
         assert!(config.paused.is_empty());
-        assert_eq!(config.action, KeepaliveAction::SpaceTap);
+        assert_eq!(config.action, KeepaliveAction::WTap);
         assert!(config.adaptive_actions);
+        assert!(config.auto_elevate);
+        assert!(config.zero_config_migrated);
+        assert!(config.community_intelligence);
+        assert_eq!(config.adaptive_min_samples, 20);
         assert!(config.key_sequence.is_empty());
         assert!(!config.send_without_focus);
         assert!(config.hold_while_playing);
@@ -802,7 +877,7 @@ mod tests {
         assert!(!config.check_updates_on_launch);
         assert!(config.ignored_update_tag.is_none());
         assert!(!config.pinned);
-        assert_eq!(config.last_tab, "general");
+        assert_eq!(config.last_tab, "targets");
         assert!(config.settings_interface_collapsed);
         assert_eq!(config.target_view, TargetView::All);
         assert_eq!(config.target_density, TargetDensity::Compact);
@@ -815,6 +890,33 @@ mod tests {
         assert!(!config.first_run_notified);
         assert!(config.overrides.is_empty());
         assert!(config.profiles.is_empty());
+    }
+
+    #[test]
+    fn migrate_applies_zero_config_defaults_for_legacy_users() {
+        let mut config = AppConfig {
+            action: KeepaliveAction::SpaceTap,
+            adaptive_min_samples: 50,
+            community_intelligence: false,
+            auto_elevate: false,
+            zero_config_migrated: false,
+            background_delivery_migrated: true,
+            ..AppConfig::default()
+        };
+        assert!(config.migrate());
+        assert_eq!(config.action, KeepaliveAction::WTap);
+        assert_eq!(config.adaptive_min_samples, 20);
+        assert!(config.community_intelligence);
+        assert!(config.auto_elevate);
+        assert!(config.zero_config_migrated);
+        assert!(!config.migrate());
+    }
+
+    #[test]
+    fn known_exe_keepalive_overrides_for_gta5() {
+        let resolved = AppConfig::known_exe_keepalive("GTA5.exe").unwrap();
+        assert_eq!(resolved.action, ResolvedAction::WTap);
+        assert_eq!(resolved.interval, 540);
     }
 
     #[test]

@@ -29,14 +29,17 @@
 
 ## What It Does
 
-OMNAFK watches your visible windows, marks the ones that look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. It runs from the tray, wakes when a marked target appears, and returns to dormancy when there is nothing to do.
+OMNAFK watches your visible windows, marks the ones that look like games, and keeps them awake without asking you to babysit another control panel. There is no arm button and no start button. Install it, launch a game, and it handles the rest — including restarting elevated when a game requires it.
 
 ## Highlights
 
 - Sightline detects fullscreen, borderless, and game-platform windows automatically.
 - Target details explain why a window was marked and show adaptive action progress.
-- Sends real keyboard/mouse input (`SendInput`) by default for better game compatibility.
-- Learns a small whitelist of per-game movement keys and can use those learned actions once it has enough samples.
+- Sends real keyboard/mouse input (`SendInput`) so keepalives work in virtually every game.
+- Restarts elevated automatically when a game runs as administrator (UAC prompt once).
+- Ships built-in profiles for common games (GTA V, Roblox, Minecraft, and more).
+- Learns your movement keys quickly (20 samples) and switches to adaptive keepalives per game.
+- Community intelligence on by default for crowd-sourced detection hints and proven settings.
 - Skips ticks while there is recent user input, so it stays out of your way while you are playing.
 - Can move marked games to a preferred monitor, with per-target overrides and placement status.
 - The tray menu shows current state, target counts, and the next scheduled tick at a glance.
@@ -51,7 +54,7 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 The app is connected to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check releases, open the latest download, open the repository, and start a bug report.
 
-New stable version tags, such as `v0.1.9`, build and attach the custom setup executable to GitHub Releases.
+New stable version tags, such as `v0.1.10`, build and attach the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
@@ -93,9 +96,9 @@ Local installer builds are written to `dist\OMNAFK-Setup.exe`.
 <summary>Release checklist</summary>
 
 ```powershell
-git tag v0.1.9
+git tag v0.1.10
 git push origin main
-git push origin v0.1.9
+git push origin v0.1.10
 ```
 
 GitHub Actions builds the Windows installer and publishes it to GitHub Releases. See [docs/RELEASING.md](docs/RELEASING.md) for the full release checklist.

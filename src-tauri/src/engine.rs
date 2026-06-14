@@ -114,6 +114,7 @@ pub type SharedEngine = Arc<Engine>;
 pub struct Engine {
     inner: RwLock<EngineInner>,
     stop: AtomicBool,
+    pending_elevation: AtomicBool,
     worker: Mutex<Option<JoinHandle<()>>>,
     sampler: Mutex<Option<JoinHandle<()>>>,
     gpu: Mutex<PdhGpuProbe>,
@@ -139,6 +140,7 @@ struct EngineInner {
     burst_until: Option<Instant>,
     monitors_cache: Vec<MonitorInfo>,
     monitors_cached_at: Instant,
+    elevation_requested: bool,
 }
 
 #[derive(Debug)]
@@ -200,8 +202,10 @@ impl Engine {
                 burst_until: None,
                 monitors_cache: Vec::new(),
                 monitors_cached_at: Instant::now() - MONITOR_CACHE_TTL,
+                elevation_requested: false,
             }),
             stop: AtomicBool::new(false),
+            pending_elevation: AtomicBool::new(false),
             worker: Mutex::new(None),
             sampler: Mutex::new(None),
             gpu: Mutex::new(PdhGpuProbe::default()),
@@ -211,6 +215,42 @@ impl Engine {
 
     pub fn community(&self) -> &SharedCommunity {
         &self.community
+    }
+
+    pub fn take_pending_elevation(&self) -> bool {
+        self.pending_elevation.swap(false, Ordering::SeqCst)
+    }
+
+    fn maybe_request_elevation(&self) {
+        let should = {
+            let inner = self.inner.read();
+            if !inner.config.auto_elevate || inner.current_elevated || inner.elevation_requested {
+                return;
+            }
+            inner.windows.values().any(|window| {
+                window.effective == Verdict::Game
+                    && window.gone_since.is_none()
+                    && window.primary_keepalive
+                    && window.facts.elevated == Some(true)
+            })
+        };
+        if !should {
+            return;
+        }
+        let mut inner = self.inner.write();
+        if inner.elevation_requested {
+            return;
+        }
+        inner.elevation_requested = true;
+        inner.push_log(
+            "info",
+            "Elevated game detected — restarting OMNAFK as administrator…".to_string(),
+        );
+        inner.push_notice(
+            "Elevated game detected — approve the UAC prompt so OMNAFK can send input.".to_string(),
+        );
+        drop(inner);
+        self.pending_elevation.store(true, Ordering::SeqCst);
     }
 
     pub fn start(self: &Arc<Self>) {
@@ -458,6 +498,7 @@ impl Engine {
             let mut inner = self.inner.write();
             inner.apply_detection(detected, Instant::now(), &self.community);
         }
+        self.maybe_request_elevation();
         self.persist_stats(false);
     }
 

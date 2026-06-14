@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.10
+
+- Made Sightline the default opening tab so detected windows are visible first.
+- Added zero-setup game hints for common titles, including Roblox, GTA V, Minecraft, Fortnite, Valorant, and CS2.
+- Lowered the adaptive learning threshold to 20 samples and switched the default keepalive action to W tap.
+- Added automatic elevation prompts for administrator-run games, with a Settings toggle to turn that behavior off.
+- Reorganized Keepalive, Stats, and Settings details so daily controls stay easier to scan.
+- Refreshed community profile data and kept shared detection hints available by default.
+
 ## v0.1.9
 
 - Changed the default keepalive delivery to real keyboard and mouse input for better game compatibility.

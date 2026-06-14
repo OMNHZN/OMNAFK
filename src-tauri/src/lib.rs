@@ -46,15 +46,14 @@ pub fn run() {
                     config::AppConfig::default()
                 }
             };
-            let needs_client =
-                config.community_intelligence && config.community_client_id.is_empty();
-            if needs_client {
+            let community = community::shared_runtime();
+            if config.community_intelligence {
                 community::ensure_client_id(&mut config);
                 if let Err(error) = config::save(&config) {
                     tracing::warn!("{error}");
                 }
+                community::refresh_on_launch(&community, &config.github_repo);
             }
-            let community = community::shared_runtime();
             let show_on_launch = config.show_on_launch && !config.headless;
             let first_run_notified = config.first_run_notified;
             let notifications = config.notifications;
