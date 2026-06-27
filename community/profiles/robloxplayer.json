@@ -1,0 +1,28 @@
+{
+  "exe": "robloxplayer.exe",
+  "display_name": "Roblox",
+  "family": "Roblox",
+  "status": "stable",
+  "recommended_action": "Space tap",
+  "recommended_interval": 540,
+  "confidence": 0.9,
+  "confidence_split": {
+    "detection": 0.92,
+    "action": 0.9,
+    "monitor": 0.82
+  },
+  "verified": "2026-06-17",
+  "variants": ["Roblox Player"],
+  "verified": [
+    "Legacy desktop player detection",
+    "Basic keepalive behavior"
+  ],
+  "monitor": {
+    "style": "Preserve size",
+    "note": "Legacy player builds can vary by install channel."
+  },
+  "notes": [
+    "This profile is kept for older installs.",
+    "When both Roblox executables appear, the beta player profile is preferred."
+  ]
+}

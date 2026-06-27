@@ -1,0 +1,50 @@
+name: Installer or update report
+description: Report setup, startup, or update problems
+title: "[Install/Update]: "
+labels: ["installer"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for setup windows, Start with Windows, update checks, download problems, and installer launch issues.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installer
+        - Start with Windows
+        - Update check
+        - Update download
+        - App launch
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Tell us what you clicked, what appeared, and where it stopped.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OMNAFK version
+      placeholder: v0.1.12
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or logs
+      description: Attach setup screenshots, update messages, or relevant log lines.
+    validations:
+      required: false

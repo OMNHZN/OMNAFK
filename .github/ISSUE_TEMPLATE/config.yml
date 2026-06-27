@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Download the latest release
+    url: https://github.com/OMNHZN/OMNAFK/releases/latest
+    about: Get the newest stable OMNAFK installer.
+  - name: User guide
+    url: https://github.com/OMNHZN/OMNAFK/blob/main/docs/GUIDE.md
+    about: Learn how Sightline, keepalive settings, updates, and community profiles work.
+  - name: Troubleshooting
+    url: https://github.com/OMNHZN/OMNAFK/blob/main/docs/TROUBLESHOOTING.md
+    about: Fix common detection, setup, tray, and update problems before opening an issue.
+  - name: Security report
+    url: https://github.com/OMNHZN/OMNAFK/security/advisories/new
+    about: Report installer, update, privilege, or execution-safety issues privately.

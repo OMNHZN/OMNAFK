@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "updated": "2026-06-17",
+  "ingest_url": null,
+  "summary": "Official OMNAFK community profile manifest.",
+  "games": {
+    "robloxplayerbeta.exe": {
+      "name": "Roblox",
+      "family": "Roblox",
+      "action": "Space tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.95,
+      "detection_confidence": 0.97,
+      "action_confidence": 0.94,
+      "monitor_confidence": 0.88,
+      "reports": 100,
+      "top_keys": ["SPACE", "W"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "monitor_style": "Preserve size",
+      "monitor_note": "Borderless fullscreen works best for monitor placement.",
+      "status": "stable",
+      "verified": "2026-06-17",
+      "variants": ["Roblox Player", "Bloxstrap"],
+      "reason": "Common Roblox desktop player executable with stable keepalive behavior.",
+      "limitations": ["Some experiences can react differently to repeated input."],
+      "profile": "community/profiles/robloxplayerbeta.json"
+    },
+    "robloxplayer.exe": {
+      "name": "Roblox",
+      "family": "Roblox",
+      "action": "Space tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.9,
+      "detection_confidence": 0.92,
+      "action_confidence": 0.9,
+      "monitor_confidence": 0.82,
+      "reports": 50,
+      "top_keys": ["SPACE", "W"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "monitor_style": "Preserve size",
+      "monitor_note": "Legacy player builds can vary by install channel.",
+      "status": "stable",
+      "verified": "2026-06-17",
+      "variants": ["Roblox Player"],
+      "reason": "Legacy Roblox player executable kept for older installs.",
+      "limitations": ["Prefer robloxplayerbeta.exe when both appear."],
+      "profile": "community/profiles/robloxplayer.json"
+    },
+    "gta5.exe": {
+      "name": "Grand Theft Auto V",
+      "family": "Rockstar Games",
+      "action": "W tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.85,
+      "detection_confidence": 0.9,
+      "action_confidence": 0.85,
+      "monitor_confidence": 0.76,
+      "reports": 40,
+      "top_keys": ["W"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "monitor_style": "Preserve size",
+      "monitor_note": "Window placement works best before entering exclusive fullscreen.",
+      "status": "stable",
+      "verified": "2026-06-17",
+      "variants": ["Rockstar Games Launcher", "Steam", "Epic Games"],
+      "reason": "Movement-key keepalive is usually less disruptive for open-world idle states.",
+      "limitations": ["Online modes and launchers can change behavior after updates."],
+      "profile": "community/profiles/gta5.json"
+    }
+  },
+  "detection": {
+    "known_exes": [
+      "minecraft.windows.exe",
+      "javaw.exe",
+      "league of legends.exe",
+      "gta5.exe",
+      "fortniteclient-win64-shipping.exe",
+      "valorant-win64-shipping.exe",
+      "cs2.exe",
+      "robloxplayerbeta.exe",
+      "robloxplayer.exe"
+    ],
+    "path_patterns": [
+      "steamapps\\common",
+      "epic games\\",
+      "riot games\\",
+      "rockstar games\\",
+      "roblox\\versions"
+    ],
+    "negative_exes": [
+      "discord.exe",
+      "spotify.exe",
+      "applicationframehost.exe",
+      "systemsettings.exe"
+    ],
+    "negative_classes": [
+      "shell_traywnd",
+      "progman"
+    ]
+  }
+}

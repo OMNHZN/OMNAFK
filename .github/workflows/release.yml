@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Build custom OMNAFK setup
+        shell: pwsh
+        run: ./scripts/build-custom-installer.ps1 -KeepBuildCache
+
+      - name: Checksum installer
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash dist/OMNAFK-Setup.exe -Algorithm SHA256
+          "$($hash.Hash)  OMNAFK-Setup.exe" | Set-Content -Encoding ascii dist/OMNAFK-Setup.exe.sha256
+
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $path = "docs/releases/${{ github.ref_name }}.md"
+          if (Test-Path $path) {
+            Copy-Item $path release-notes.md
+          } else {
+            "Stable OMNAFK build ${{ github.ref_name }}." | Set-Content release-notes.md
+          }
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OMNAFK ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            dist/OMNAFK-Setup.exe
+            dist/OMNAFK-Setup.exe.sha256
+          prerelease: ${{ contains(github.ref_name, '-') }}

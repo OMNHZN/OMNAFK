@@ -1,0 +1,55 @@
+name: Community profile suggestion
+description: Suggest or correct a shared game profile
+title: "[Profile]: "
+labels: ["community profile"]
+body:
+  - type: input
+    id: game
+    attributes:
+      label: Game name
+      placeholder: Game name
+    validations:
+      required: true
+  - type: input
+    id: exe
+    attributes:
+      label: Executable name
+      placeholder: game.exe
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: Keepalive action that worked best
+      options:
+        - Space tap
+        - W tap
+        - Camera nudge
+        - Mouse wiggle
+        - Scroll tick
+        - Right click
+        - Gamepad nudge
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: interval
+    attributes:
+      label: Interval used
+      placeholder: 9 min
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Mention monitor placement, focus behavior, launchers, or anything unusual.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OMNAFK version
+      placeholder: v0.1.12
+    validations:
+      required: false

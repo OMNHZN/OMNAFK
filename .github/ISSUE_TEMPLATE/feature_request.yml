@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an improvement for OMNAFK
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would this improve?
+      description: Describe the workflow, setting, or confusion this would solve.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested behavior
+      description: Tell us what the app should do.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other options considered
+      description: Optional, but helpful when there are tradeoffs.
+    validations:
+      required: false

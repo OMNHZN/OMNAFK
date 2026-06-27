@@ -1,0 +1,29 @@
+{
+  "exe": "gta5.exe",
+  "display_name": "Grand Theft Auto V",
+  "family": "Rockstar Games",
+  "status": "stable",
+  "recommended_action": "W tap",
+  "recommended_interval": 540,
+  "confidence": 0.85,
+  "confidence_split": {
+    "detection": 0.9,
+    "action": 0.85,
+    "monitor": 0.76
+  },
+  "verified": "2026-06-17",
+  "variants": ["Rockstar Games Launcher", "Steam", "Epic Games"],
+  "verified": [
+    "Rockstar install path detection",
+    "Movement-key keepalive behavior",
+    "Fallback escalation after failed ticks"
+  ],
+  "monitor": {
+    "style": "Preserve size",
+    "note": "Window placement works best before entering exclusive fullscreen."
+  },
+  "notes": [
+    "Online modes and launchers can change behavior after updates.",
+    "Adaptive action should be left enabled when the local game reacts better to a different movement key."
+  ]
+}

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMNAFK Setup</title>
+<style>
+  :root{
+    --bg:#000;--surface:#0A0A0A;--surface-2:#141414;--border:#1F1F1F;--border-strong:#333;
+    --text:#FFF;--text-dim:#9A9A9A;--text-faint:#5C5C5C;--invert-bg:#FFF;--invert-text:#000;
+    --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;--body:'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+  body{display:grid;place-items:center;color:var(--text);font-family:var(--body)}
+  button,input{font:inherit}
+  button{color:inherit;background:none;border:0;cursor:pointer}
+  button:disabled{cursor:default;opacity:.38}
+  button:focus-visible,input:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+  .setup{width:560px;height:380px;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+         overflow:hidden;display:flex;flex-direction:column}
+  .head,.rail,.welcome,.install,.donep,.foot .fine{cursor:move}
+  .head{height:40px;display:flex;align-items:center;gap:10px;padding:0 8px 0 16px;flex:none;user-select:none}
+  .glyph{width:18px;height:18px;object-fit:contain;flex:none}.hname{font:700 13px var(--mono);letter-spacing:.08em}
+  .hver{font:11px var(--mono);color:var(--text-faint);margin-top:1px}.sp{flex:1}
+  .x{width:30px;height:30px;display:grid;place-items:center;border-radius:6px;color:var(--text-dim)}
+  .x:hover{background:var(--surface-2);color:var(--text)}
+  .mid{flex:1;min-height:0;display:flex}.rail{width:160px;flex:none;background:var(--surface);border-right:1px solid var(--border);
+      padding:16px 0;display:flex;flex-direction:column;gap:2px}
+  .step{height:36px;display:flex;align-items:center;padding:0 16px;font:11px var(--mono);letter-spacing:.08em;
+        color:var(--text-faint);position:relative;gap:8px}.step .num{width:18px}.step.current{color:var(--text)}
+  .step.current::after{content:"";position:absolute;right:0;top:6px;bottom:6px;width:2px;background:var(--text)}
+  .step.done{color:var(--text-dim)}.step.done .num{visibility:hidden}.step.done .chk{display:block}
+  .chk{display:none;position:absolute;left:16px}
+  .content{flex:1;min-width:0;position:relative}.page{position:absolute;inset:0;display:none;flex-direction:column;padding:24px 24px 12px}
+  .page.active{display:flex}.foot{height:56px;flex:none;border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px}
+  .fine{font:10px var(--mono);letter-spacing:.06em;color:var(--text-faint);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .btn2{height:34px;padding:0 18px;border:1px solid var(--border-strong);border-radius:6px;font-size:13px;display:inline-flex;align-items:center}
+  .btn2:hover{background:var(--surface-2)}.btn1{height:34px;padding:0 22px;border-radius:6px;background:var(--invert-bg);color:var(--invert-text);
+      font:700 12px var(--mono);letter-spacing:.1em}.btn1:hover{background:#E6E6E6}
+  .btnghost{font-size:12px;color:var(--text-faint);padding:0 6px}.btnghost:hover{color:var(--text)}
+  .welcome{align-items:center;justify-content:center;text-align:center;gap:8px}.welcome .mark{width:56px;height:56px;margin-bottom:4px}
+  .wname{font:700 22px var(--mono);letter-spacing:.1em}.wtag{font-size:13px;color:var(--text-dim);font-style:italic}
+  .wmeta{font:10px var(--mono);letter-spacing:.06em;color:var(--text-faint);margin-top:10px;text-transform:uppercase}
+  .wmeta a{color:var(--text-dim);text-decoration:underline;text-transform:none;cursor:pointer}
+  .wmeta a:hover{color:var(--text)}
+  .wchangelog{font:11px var(--mono);color:var(--text-dim);max-width:340px;line-height:1.45;text-align:left;margin-top:12px;
+             max-height:88px;overflow:auto;white-space:pre-wrap;padding:10px 12px;border:1px solid var(--border);border-radius:6px}
+  .wblock{font-size:12px;color:var(--text-dim);max-width:340px;line-height:1.45;margin-top:8px}
+  .orow{height:40px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);font-size:13px}
+  .orow .ol{flex:1}.path{height:28px;flex:1;min-width:0;background:var(--surface);border:1px solid var(--border-strong);
+      border-radius:6px;padding:0 10px;color:var(--text);font:11px var(--mono)}
+  .path:read-only{opacity:.72}
+  .browse{height:28px;padding:0 12px;border:1px solid var(--border-strong);border-radius:6px;font-size:12px;flex:none}
+  .browse:hover{background:var(--surface-2)}.toggle{width:38px;height:20px;border-radius:999px;background:var(--surface);
+      border:1px solid var(--border-strong);position:relative;flex:none;transition:background .12s ease-out}
+  .toggle .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--text-dim);
+      transition:transform .12s ease-out,background .12s ease-out}.toggle.on{background:var(--invert-bg);border-color:var(--invert-bg)}
+  .toggle.on .knob{transform:translateX(18px);background:#000}.ofine{font:10px var(--mono);letter-spacing:.06em;color:var(--text-faint);margin-top:auto;text-align:center}
+  .install{justify-content:center;gap:14px}.pct{font:22px var(--mono)}.track{height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--text);transition:width .15s ease-out}.doing{font:11px var(--mono);color:var(--text-faint);min-height:16px}
+  .donep{align-items:center;justify-content:center;gap:10px;text-align:center}.dname{font:700 18px var(--mono);letter-spacing:.12em}
+  .dfine{font-size:12px;color:var(--text-dim);max-width:300px;line-height:1.45}
+  .dwarn{margin:6px 0 0;padding:0;list-style:none;text-align:left;font:11px var(--mono);color:var(--text-faint);max-width:300px}
+  .dwarn li{padding:2px 0 2px 12px;position:relative;line-height:1.4}
+  .dwarn li::before{content:"·";position:absolute;left:0;color:var(--text-dim)}
+  .err{color:var(--text)}
+  @media (prefers-reduced-motion: reduce){.toggle,.toggle .knob,.fill{transition:none}}
+</style>
+</head>
+<body>
+<div class="setup" data-tauri-drag-region>
+  <div class="head" data-tauri-drag-region>
+    <img class="glyph" src="assets/sentinel-dormant.png" alt="">
+    <span class="hname" id="headTitle">OMNAFK SETUP</span><span class="hver" id="headVersion">v0.1.16</span>
+    <span class="sp"></span>
+    <button class="x" id="closeBtn" aria-label="Cancel setup">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="mid">
+    <div class="rail" id="rail" data-tauri-drag-region>
+      <div class="step" data-i="0"><span class="num">01</span><span class="sl">WELCOME</span><svg class="chk" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 13l5 5L20 7"/></svg></div>
+      <div class="step" data-i="1"><span class="num">02</span><span class="sl">OPTIONS</span><svg class="chk" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 13l5 5L20 7"/></svg></div>
+      <div class="step" data-i="2"><span class="num">03</span><span class="sl">INSTALL</span><svg class="chk" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 13l5 5L20 7"/></svg></div>
+      <div class="step" data-i="3"><span class="num">04</span><span class="sl">DONE</span><svg class="chk" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 13l5 5L20 7"/></svg></div>
+    </div>
+    <div class="content">
+      <div class="page welcome active" data-i="0">
+        <img class="mark" src="assets/sentinel-dormant.png" alt="">
+        <div class="wname">OMNAFK</div>
+        <div class="wtag" id="wtag">Awake when you aren't.</div>
+        <div class="wmeta" id="meta"></div>
+        <div class="wchangelog" id="wchangelog" hidden></div>
+        <div class="wblock" id="wblock" hidden></div>
+      </div>
+      <div class="page" data-i="1" id="optionsPage">
+        <div class="orow install-only"><span class="ol" style="flex:none">Install location</span><input class="path" id="installPath" spellcheck="false"><button class="browse" id="browseBtn">Browse...</button></div>
+        <div class="orow install-only"><span class="ol">Start with Windows</span><button class="toggle on" id="startTgl" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+        <div class="orow install-only"><span class="ol">Desktop shortcut</span><button class="toggle" id="desktopTgl" role="switch" aria-checked="false"><span class="knob"></span></button></div>
+        <div class="orow install-only" id="vigemRow" style="display:none"><span class="ol">Gamepad driver (ViGEmBus)</span><button class="toggle" id="vigemTgl" role="switch" aria-checked="false"><span class="knob"></span></button></div>
+        <div class="orow install-only"><span class="ol">Launch when finished</span><button class="toggle on" id="launchTgl" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+        <div class="orow uninstall-only" style="display:none"><span class="ol">Keep my settings</span><button class="toggle on" id="keepTgl" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+        <div class="ofine" id="optionsFine">PER-USER INSTALL. NO ADMINISTRATOR RIGHTS REQUIRED.</div>
+      </div>
+      <div class="page install" data-i="2">
+        <div class="pct" id="pct">0%</div>
+        <div class="track"><div class="fill" id="fill"></div></div>
+        <div class="doing" id="doing">Preparing...</div>
+      </div>
+      <div class="page donep" data-i="3">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l3 3 6-7"/></svg>
+        <div class="dname" id="doneTitle">INSTALLED</div>
+        <div class="dfine" id="doneFine">OMNAFK is in your tray. It wakes when a game does.</div>
+        <ul class="dwarn" id="doneWarn" hidden></ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot" id="foot">
+    <span class="fine" id="fine">OMNAFK SETUP · MIT · PER-USER</span>
+    <button class="btnghost" id="customize">Customize</button>
+    <button class="btn2" id="back" style="display:none">Back</button>
+    <button class="btn1" id="next">INSTALL -></button>
+  </div>
+</div>
+<script>
+const T=window.__TAURI__;
+const inv=(cmd,args)=>T?T.core.invoke(cmd,args):Promise.resolve(null);
+const $=id=>document.getElementById(id);
+const steps=[...document.querySelectorAll('.step')],pages=[...document.querySelectorAll('.page')];
+let state={mode:'install',version:'0.1.16',install_dir:'',payload_size:'payload',payload_embedded:false,install_kind:'fresh',is_downgrade:false,webview2_ok:true};
+let cur=0, busy=false, finished=false, failed=false, confirming=false, downgradeConfirmed=false, savedFooter=null;
+let progressReady=Promise.resolve(), pollTimer=null, watchdogTimer=null, lastProgressAt=0, lastProgressKey='';
+
+function isOn(id){return $(id).classList.contains('on')}
+function setOn(btn,on){btn.classList.toggle('on',on);btn.setAttribute('aria-checked',String(on))}
+function setRail(labels){steps.forEach((s,i)=>s.querySelector('.sl').textContent=labels[i])}
+function installKind(){return state.mode==='uninstall'?'uninstall':state.install_kind||'fresh'}
+function isDowngrade(){return installKind()==='downgrade'}
+function isUpdate(){return installKind()==='update'}
+function isReinstall(){return installKind()==='reinstall'}
+function isExistingInstall(){return isUpdate()||isReinstall()||isDowngrade()}
+function workLabel(){
+  if(state.mode==='uninstall')return 'REMOVE ->';
+  if(isDowngrade())return 'DOWNGRADE ->';
+  if(isUpdate())return 'UPDATE ->';
+  if(isReinstall())return 'REINSTALL ->';
+  return 'INSTALL ->';
+}
+function busyLabel(){
+  if(state.mode==='uninstall')return 'REMOVING...';
+  if(isDowngrade())return 'DOWNGRADING...';
+  if(isUpdate())return 'UPDATING...';
+  if(isReinstall())return 'REINSTALLING...';
+  return 'INSTALLING...';
+}
+function workStepLabel(){
+  if(state.mode==='uninstall')return 'REMOVE';
+  if(isDowngrade())return 'DOWNGRADE';
+  if(isUpdate())return 'UPDATE';
+  if(isReinstall())return 'REINSTALL';
+  return 'INSTALL';
+}
+function renderMeta(){
+  const meta=$('meta');
+  const versionLine=isDowngrade()&&state.installed_version
+    ? 'V'+state.installed_version+' → V'+state.version+' (downgrade)'
+    : isUpdate()&&state.installed_version
+    ? 'V'+state.installed_version+' → V'+state.version
+    : 'V'+state.version;
+  const license=state.license_url||'https://github.com/OMNHZN/OMNAFK/blob/main/LICENSE';
+  meta.innerHTML=versionLine+' · '+state.payload_size+' · <a href="#" id="licenseLink">MIT License</a>';
+  const changelog=$('wchangelog');
+  if(state.changelog_excerpt){
+    changelog.textContent=state.changelog_excerpt;
+    changelog.hidden=false;
+  }else{
+    changelog.hidden=true;changelog.textContent='';
+  }
+  const block=$('wblock');
+  if(state.webview2_ok===false){
+    block.textContent='Microsoft Edge WebView2 Runtime is required before setup can continue.';
+    block.hidden=false;
+  }else if(isDowngrade()){
+    block.textContent='This build is older than what is installed. Confirm only if you mean to roll back.';
+    block.hidden=false;
+  }else{
+    block.hidden=true;block.textContent='';
+  }
+  const link=$('licenseLink');
+  if(link){
+    link.addEventListener('click',e=>{
+      e.preventDefault();
+      inv('open_setup_url',{url:license}).catch(()=>{});
+    });
+  }
+}
+function applyMode(){
+  const uninstall=state.mode==='uninstall',update=isUpdate(),reinstall=isReinstall(),downgrade=isDowngrade();
+  const work=workStepLabel();
+  setRail(uninstall?['CONFIRM','OPTIONS','REMOVE','DONE']:['WELCOME','OPTIONS',work,'DONE']);
+  document.querySelectorAll('.install-only').forEach(el=>el.style.display=uninstall?'none':'flex');
+  document.querySelectorAll('.uninstall-only').forEach(el=>el.style.display=uninstall?'flex':'none');
+  $('installPath').value=state.install_dir;
+  $('installPath').readOnly=!!state.installed;
+  $('browseBtn').style.display=state.installed?'none':'inline-flex';
+  setOn($('startTgl'),state.start_with_windows!==false);
+  setOn($('desktopTgl'),!!state.desktop_shortcut);
+  $('vigemRow').style.display=state.vigem_available?'flex':'none';
+  $('headVersion').textContent='v'+state.version;
+  $('headTitle').textContent=uninstall?'OMNAFK UNINSTALL':downgrade?'OMNAFK DOWNGRADE':update?'OMNAFK UPDATE':'OMNAFK SETUP';
+  $('wtag').textContent=uninstall?'Remove OMNAFK from this account.':
+    downgrade?'This setup is older than the installed version.':
+    update?'A newer build is ready to install.':
+    reinstall?'Refresh the app files in place.':
+    'Awake when you aren\'t.';
+  renderMeta();
+  $('doneTitle').textContent=uninstall?'REMOVED':downgrade?'DOWNGRADED':update?'UPDATED':reinstall?'REINSTALLED':'INSTALLED';
+  $('doneFine').textContent=uninstall?'OMNAFK has been removed from this user account.':'OMNAFK is in your tray. It wakes when a game does.';
+  $('doneWarn').hidden=true;$('doneWarn').innerHTML='';
+  $('fine').textContent=uninstall?'OMNAFK UNINSTALL · SETTINGS KEPT BY DEFAULT':'OMNAFK SETUP · MIT · PER-USER';
+  $('customize').textContent=uninstall?'Options':'Customize';
+  showDirProblem(null);
+  validateDir();
+  go(0);
+}
+function go(i){
+  cur=i; confirming=false; restoreFooter();
+  pages.forEach(p=>p.classList.toggle('active',+p.dataset.i===i));
+  steps.forEach(s=>{const si=+s.dataset.i;s.classList.toggle('current',si===i);s.classList.toggle('done',si<i);});
+  $('customize').style.display=(i===0&&!busy)?'inline':'none';
+  $('back').style.display=(i===1&&!busy)?'inline-flex':'none';
+  const next=$('next');
+  if(i===0||i===1){next.textContent=workLabel();next.disabled=state.webview2_ok===false}
+  if(i===2){next.textContent=busyLabel();next.disabled=true}
+  if(i===3){next.textContent='FINISH';next.disabled=false;finished=true}
+}
+function restoreFooter(){
+  if(!savedFooter)return;
+  $('foot').innerHTML=savedFooter;savedFooter=null;wireFooter();
+}
+function wireFooter(){
+  $('foot').onclick=e=>{
+    const id=e.target.id;
+    if(id==='next'&&failed){inv('exit_setup');return}
+    if(id==='customize')go(1);
+    if(id==='back')go(0);
+    if(id==='next'){
+      if(cur===0||cur===1)startWork();
+      else if(cur===3)finish();
+    }
+    if(id==='keepInstalling'){downgradeConfirmed=false;restoreFooter();confirming=false}
+    if(id==='confirmDowngrade'){downgradeConfirmed=true;confirming=false;restoreFooter();reallyStartWork()}
+    if(id==='cancelSetup')inv('exit_setup');
+  };
+}
+function startWork(){
+  if(state.webview2_ok===false){return}
+  if(isDowngrade()&&!downgradeConfirmed){
+    confirming=true;savedFooter=$('foot').innerHTML;
+    $('foot').innerHTML='<span class="fine">Install the older build?</span><button class="btn2" id="keepInstalling">Keep current</button><button class="btnghost" id="confirmDowngrade">Downgrade</button>';
+    wireFooter();
+    return;
+  }
+  if(isExistingInstall()&&cur===0){reallyStartWork();return}
+  if(state.mode!=='uninstall'&&T){
+    inv('validate_install_dir',{path:$('installPath').value}).then(problem=>{
+      if(problem){go(1);showDirProblem(problem);return}
+      reallyStartWork();
+    }).catch(()=>reallyStartWork());
+    return;
+  }
+  reallyStartWork();
+}
+function reallyStartWork(){
+  failed=false;
+  finished=false;
+  busy=true;go(2);setProgress(0,state.mode==='uninstall'?'Preparing removal...':'Preparing install...',null);
+  startProgressPolling();
+  progressReady.then(()=>{
+    if(state.mode==='uninstall'){
+      return inv('start_uninstall',{options:{install_dir:state.install_dir,keep_settings:isOn('keepTgl')}});
+    }
+    return inv('start_install',{options:{install_dir:$('installPath').value.trim(),start_with_windows:isOn('startTgl'),desktop_shortcut:isOn('desktopTgl'),allow_downgrade:downgradeConfirmed||isDowngrade(),install_gamepad_driver:isOn('vigemTgl')}});
+  }).catch(showError);
+}
+function setProgress(percent,message,error){
+  $('pct').textContent=Math.max(0,Math.min(100,percent))+'%';
+  $('fill').style.width=Math.max(0,Math.min(100,percent))+'%';
+  $('doing').textContent=error||message;
+  $('doing').classList.toggle('err',!!error);
+}
+function showDoneWarnings(warnings){
+  const list=$('doneWarn');
+  if(!warnings||!warnings.length){list.hidden=true;list.innerHTML='';return}
+  list.innerHTML=warnings.map(w=>'<li>'+String(w).replace(/</g,'&lt;')+'</li>').join('');
+  list.hidden=false;
+}
+function startProgressPolling(){
+  stopProgressPolling();
+  lastProgressAt=Date.now();
+  lastProgressKey='';
+  if(!T)return;
+  pollTimer=setInterval(()=>inv('setup_progress').then(payload=>{
+    if(payload&&(busy||payload.done))handleProgress(payload);
+  }).catch(()=>{}),350);
+  watchdogTimer=setInterval(()=>{
+    if(busy&&Date.now()-lastProgressAt>45000){
+      $('doing').textContent='Still working... If this never finishes, close OMNAFK manually and run setup again.';
+    }
+  },1000);
+}
+function stopProgressPolling(){
+  if(pollTimer)clearInterval(pollTimer);
+  if(watchdogTimer)clearInterval(watchdogTimer);
+  pollTimer=null;watchdogTimer=null;
+}
+function showError(error){busy=false;failed=true;stopProgressPolling();setProgress(100,'Failed.',String(error));$('next').textContent='CLOSE';$('next').disabled=false;finished=true}
+function handleProgress(payload){
+  if(failed)return;
+  const key=[payload.percent,payload.message,payload.done,payload.error,(payload.warnings||[]).join('|')].join('|');
+  if(key!==lastProgressKey){lastProgressAt=Date.now();lastProgressKey=key}
+  setProgress(payload.percent,payload.message,payload.error);
+  if(payload.done){
+    stopProgressPolling();
+    busy=false;
+    finished=true;
+    if(payload.error){failed=true;$('next').textContent='CLOSE';$('next').disabled=false;return}
+    showDoneWarnings(payload.warnings||[]);
+    setTimeout(()=>go(3),220);
+  }
+}
+function finish(){
+  if(state.mode==='uninstall'){inv('exit_setup');return}
+  inv('finish_install',{installDir:$('installPath').value.trim(),launch:isOn('launchTgl')});
+}
+document.addEventListener('click',e=>{const t=e.target.closest('.toggle');if(t)setOn(t,!isOn(t.id));});
+$('browseBtn').addEventListener('click',()=>inv('browse_install_dir').then(path=>{if(path){$('installPath').value=path;validateDir();}}).catch(showError));
+
+let valTimer=null;
+function showDirProblem(problem){
+  const fine=$('optionsFine');
+  fine.textContent=problem||(state.mode==='uninstall'?'OMNAFK WILL BE REMOVED FROM THIS USER ACCOUNT.':'PER-USER INSTALL. NO ADMINISTRATOR RIGHTS REQUIRED.');
+  fine.classList.toggle('err',!!problem);
+}
+function validateDir(){
+  if(state.mode==='uninstall'||!T||state.installed)return;
+  inv('validate_install_dir',{path:$('installPath').value}).then(showDirProblem).catch(()=>{});
+}
+$('installPath').addEventListener('input',()=>{clearTimeout(valTimer);valTimer=setTimeout(validateDir,300);});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const tag=e.target&&e.target.tagName;
+    if(tag==='INPUT'||tag==='BUTTON')return;
+    const next=$('next');
+    if(next&&!next.disabled)next.click();
+  }
+  if(e.key==='Escape')$('closeBtn').click();
+});
+$('closeBtn').addEventListener('click',()=>{
+  if(finished){inv('exit_setup');return}
+  if(busy)return;
+  if(confirming)return;
+  confirming=true;savedFooter=$('foot').innerHTML;
+  $('foot').innerHTML='<span class="fine">Cancel setup?</span><button class="btn2" id="keepInstalling">Keep installing</button><button class="btnghost" id="cancelSetup">Cancel setup</button>';
+  wireFooter();
+});
+wireFooter();
+function enableWindowDrag(){
+  const current=T?.window?.getCurrentWindow?.();
+  if(!current?.startDragging)return;
+  document.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    if(e.target.closest('button,input,select,textarea,a,[role="switch"],a'))return;
+    if(!e.target.closest('[data-tauri-drag-region]'))return;
+    e.preventDefault();
+    current.startDragging().catch(()=>{});
+  },true);
+}
+if(T){
+  enableWindowDrag();
+  progressReady=T.event.listen('setup://progress',e=>handleProgress(e.payload)).catch(()=>null);
+  inv('setup_state').then(s=>{state=s;applyMode()}).catch(showError);
+}else{
+  state={mode:'install',version:'0.1.16',install_dir:'%LOCALAPPDATA%\\OMNAFK',payload_size:'~24.1 MB on disk',
+         payload_embedded:true,installed:false,installed_version:null,install_kind:'fresh',
+         license_url:'https://github.com/OMNHZN/OMNAFK/blob/main/LICENSE',help_url:'https://github.com/OMNHZN/OMNAFK',
+         start_with_windows:true,desktop_shortcut:false,vigem_available:false};
+  applyMode();
+}
+</script>
+</body>
+</html>
+

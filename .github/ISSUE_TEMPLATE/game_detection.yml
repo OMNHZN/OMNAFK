@@ -1,0 +1,63 @@
+name: Game detection report
+description: Report a game or window OMNAFK does not mark correctly
+title: "[Detection]: "
+labels: ["game detection"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a game is missing, incorrectly ignored, or marked with the wrong behavior.
+  - type: input
+    id: game
+    attributes:
+      label: Game or app name
+      placeholder: Roblox
+    validations:
+      required: true
+  - type: input
+    id: exe
+    attributes:
+      label: Executable name
+      placeholder: robloxplayerbeta.exe
+    validations:
+      required: false
+  - type: dropdown
+    id: behavior
+    attributes:
+      label: What happened?
+      options:
+        - Not detected
+        - Detected as ignored
+        - Wrong keepalive action
+        - Wrong monitor placement
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Include the Sightline row, filter state, and what you expected OMNAFK to do.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OMNAFK version
+      placeholder: v0.1.12
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Attach Sightline or Settings screenshots if they help.
+    validations:
+      required: false

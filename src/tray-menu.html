@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMNAFK Tray Menu</title>
+<style>
+  :root{
+    --bg:#000000; --surface:#0A0A0A; --surface-2:#141414;
+    --border:#1F1F1F; --border-strong:#333333;
+    --text:#FFFFFF; --text-dim:#9A9A9A; --text-faint:#5C5C5C;
+    --mono:'Cascadia Code',Consolas,monospace;
+    --body:'Segoe UI',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:transparent;height:100vh;overflow:hidden}
+  body{font-family:var(--body);color:var(--text);-webkit-user-select:none;user-select:none}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;width:100%;text-align:left}
+  button:focus-visible{outline:1px solid var(--text);outline-offset:-1px}
+  .panel{
+    margin:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.55);
+  }
+  .status{
+    padding:6px 10px 5px;border-bottom:1px solid var(--border);background:var(--surface);
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .status-head{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;
+  }
+  .status .brand{
+    font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--text-faint);
+    flex-shrink:0;
+  }
+  .status .line{
+    font-family:var(--mono);font-size:10px;line-height:1.3;color:var(--text-dim);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .status .line.primary{color:var(--text);font-size:10px;text-align:right;min-width:0}
+  .sep{height:1px;background:var(--border)}
+  .item{
+    display:flex;align-items:center;gap:6px;padding:0 10px;height:30px;font-size:12px;
+    color:var(--text);transition:background .12s;
+  }
+  .item:hover{background:var(--surface-2)}
+  .item.danger{color:#ffb4b4}
+  .item.danger:hover{background:#1a1010}
+  .item .hint{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--text-faint)}
+</style>
+</head>
+<body>
+<div class="panel" id="panel">
+  <div class="status">
+    <div class="status-head">
+      <div class="brand">OMNAFK</div>
+      <div class="line primary" id="stateLine">Dormant</div>
+    </div>
+    <div class="line" id="nextLine">Next tick: --</div>
+    <div class="line" id="targetsLine">Targets: 0 active</div>
+  </div>
+  <div class="sep"></div>
+  <button class="item" data-action="open">Open flyout</button>
+  <button class="item" data-action="settings">Settings</button>
+  <button class="item" data-action="updates">Check for updates</button>
+  <button class="item" data-action="bug">Report a bug</button>
+  <div class="sep"></div>
+  <button class="item" data-action="toggle_suspend" id="suspendBtn">Suspend watching</button>
+  <button class="item danger" data-action="quit">Quit OMNAFK</button>
+</div>
+<script>
+const T=window.__TAURI__||null;
+const inv=(cmd,args)=>T?T.core.invoke(cmd,args):Promise.resolve(null);
+
+function applyState(st){
+  if(!st)return;
+  document.getElementById('stateLine').textContent=st.state||'—';
+  document.getElementById('nextLine').textContent=st.next||'Next tick: --';
+  document.getElementById('targetsLine').textContent=st.targets||'Targets: 0 active';
+  const suspend=document.getElementById('suspendBtn');
+  if(suspend&&st.suspend_label)suspend.textContent=st.suspend_label;
+}
+
+async function runAction(action){
+  try{await inv('tray_menu_action',{action});}
+  catch(e){console.error(e);}
+  await inv('hide_tray_menu');
+}
+
+document.querySelectorAll('[data-action]').forEach(btn=>{
+  btn.addEventListener('click',()=>runAction(btn.dataset.action));
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')inv('hide_tray_menu');
+});
+document.addEventListener('contextmenu',e=>e.preventDefault());
+
+if(T){
+  T.event.listen('omnafk://tray-menu-state',e=>applyState(e.payload));
+  inv('get_tray_menu_state').then(applyState);
+}
+</script>
+</body>
+</html>

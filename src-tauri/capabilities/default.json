@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for the OMNAFK flyout and setup windows.",
+  "windows": ["flyout", "setup", "tray-menu"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}

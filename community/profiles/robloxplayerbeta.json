@@ -1,0 +1,29 @@
+{
+  "exe": "robloxplayerbeta.exe",
+  "display_name": "Roblox",
+  "family": "Roblox",
+  "status": "stable",
+  "recommended_action": "Space tap",
+  "recommended_interval": 540,
+  "confidence": 0.95,
+  "confidence_split": {
+    "detection": 0.97,
+    "action": 0.94,
+    "monitor": 0.88
+  },
+  "verified": "2026-06-17",
+  "variants": ["Roblox Player", "Bloxstrap"],
+  "verified": [
+    "Desktop player detection",
+    "Borderless and windowed visibility",
+    "Adaptive fallback behavior"
+  ],
+  "monitor": {
+    "style": "Preserve size",
+    "note": "Borderless fullscreen works best for monitor placement."
+  },
+  "notes": [
+    "Use local target overrides for experiences that react to repeated input.",
+    "Adaptive action can learn movement keys after enough local samples."
+  ]
+}

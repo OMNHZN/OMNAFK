@@ -1,0 +1,2426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OMNAFK</title>
+<style>
+  :root{
+    --bg:#000000; --surface:#0A0A0A; --surface-2:#141414;
+    --border:#1F1F1F; --border-strong:#333333;
+    --text:#FFFFFF; --text-dim:#9A9A9A; --text-faint:#5C5C5C;
+    --invert-bg:#FFFFFF; --invert-text:#000000;
+    --invert-bg-hover:#E6E6E6; --surface-sunken:#050505;
+    --mono:'Cascadia Code',Consolas,monospace;
+    --body:'Segoe UI',system-ui,sans-serif;
+  }
+  /* High contrast keeps the dark base but brightens text and borders. */
+  #win.theme-contrast{
+    --surface:#0E0E0E; --surface-2:#1C1C1C; --surface-sunken:#0A0A0A;
+    --border:#3A3A3A; --border-strong:#5E5E5E;
+    --text-dim:#CFCFCF; --text-faint:#9A9A9A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:transparent;height:100vh;overflow:hidden}
+  body{font-family:var(--body);color:var(--text);position:relative;
+       background:transparent}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button:focus-visible,[tabindex]:focus-visible{outline:1px solid var(--text);outline-offset:2px}
+
+
+  /* ===== flyout ===== */
+  .win{width:100vw;height:100vh;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+       display:flex;flex-direction:column;overflow:hidden;position:relative}
+  .win.pinned{border-color:var(--border-strong)}
+
+  /* header */
+  .titlebar{height:40px;display:flex;align-items:center;padding:0 8px 0 16px;flex:none;user-select:none}
+  .glyph{width:18px;height:18px;flex:none;margin-right:10px}
+  .appname{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.08em}
+  .ver{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-left:8px;margin-top:2px}
+  .titlebar .sp{flex:1}
+  .winbtn{width:30px;height:30px;display:grid;place-items:center;border-radius:6px;color:var(--text-dim)}
+  .winbtn:hover{background:var(--surface-2);color:var(--text)}
+  .winbtn.pinned{background:var(--invert-bg);color:var(--invert-text)}
+  .winbtn.pinned:hover{background:var(--invert-bg-hover)}
+
+  /* tabs */
+  .tabs{height:44px;display:flex;border-bottom:1px solid var(--border);flex:none}
+  .tab{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--text-dim);position:relative}
+  .tab:hover{background:var(--surface-2)}
+  .tab .tlabel{display:none;font-size:13px;font-weight:500}
+  .tab.active{color:var(--text)}
+  .tab.active .tlabel{display:inline}
+  .tab-labels-always .tab{gap:5px}
+  .tab-labels-always .tab .tlabel{display:inline;font-size:11px}
+  .tab-labels-icons .tab .tlabel{display:none}
+  .tab.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text)}
+  .tbadge{position:absolute;top:7px;right:8px;min-width:14px;height:14px;padding:0 4px;border-radius:999px;
+          background:var(--invert-bg);color:var(--invert-text);font-family:var(--mono);font-size:9px;
+          display:none;align-items:center;justify-content:center;line-height:14px}
+  .tab.hasbadge .tbadge{display:inline-flex}
+  .tab.active .tbadge{position:static;margin-left:-2px}
+  .tab-labels-icons .tab.active .tbadge{position:absolute;margin-left:0}
+  .version-title-hidden .titlebar .ver,.version-about-hidden .about .aver{display:none}
+  svg{display:block}
+
+  /* content */
+  .content{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  .pane{display:none}.pane.active{display:block}
+
+  .row{height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border)}
+  .row:hover{background:var(--surface-2)}
+  .row .ric{color:var(--text-dim);flex:none}
+  .row .rlabel{font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .help{width:20px;height:20px;flex:none;border:1px solid var(--border-strong);border-radius:50%;
+        color:var(--text-faint);font-size:11px;font-family:var(--mono);display:inline-grid;place-items:center;position:relative}
+  .help:hover{color:var(--text)}
+  .tip{position:absolute;right:0;top:26px;width:228px;background:var(--surface);border:1px solid var(--border-strong);
+        border-radius:6px;padding:9px 11px;font-size:12px;line-height:1.45;color:var(--text-dim);text-align:left;
+        z-index:30;display:none;font-family:var(--body);white-space:normal;overflow-wrap:break-word;box-sizing:border-box}
+  .help.open .tip{display:block}
+
+  .dropdown{position:relative}
+  .dd-btn{height:30px;min-width:110px;padding:0 28px 0 11px;background:var(--surface);border:1px solid var(--border-strong);
+          border-radius:6px;font-size:13px;text-align:left;position:relative;white-space:nowrap}
+  .dd-btn::after{content:"";position:absolute;right:10px;top:50%;width:7px;height:7px;border-right:1.5px solid var(--text-dim);
+                 border-bottom:1.5px solid var(--text-dim);transform:translateY(-70%) rotate(45deg)}
+  .dd-btn:hover{background:var(--surface-2)}
+  .dd-menu{position:absolute;right:0;top:34px;min-width:100%;background:var(--surface);border:1px solid var(--border-strong);
+           border-radius:6px;padding:4px;z-index:40;display:none}
+  .dropdown.open .dd-menu{display:block}
+  .dd-item{height:32px;display:flex;align-items:center;gap:8px;padding:0 10px 0 8px;border-radius:4px;font-size:13px;
+           white-space:nowrap;width:100%;text-align:left}
+  .dd-item:hover{background:var(--surface-2)}
+  .dd-item .dot{width:5px;height:5px;border-radius:50%;background:transparent;flex:none}
+  .dd-item.sel .dot{background:var(--text)}
+
+  .toggle{width:38px;height:20px;border-radius:999px;background:var(--surface);border:1px solid var(--border-strong);
+          position:relative;flex:none;transition:background .12s ease-out}
+  .toggle .knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--text-dim);
+                transition:transform .12s ease-out,background .12s ease-out}
+  .toggle.on{background:var(--invert-bg);border-color:var(--invert-bg)}
+  .toggle.on .knob{transform:translateX(18px);background:var(--invert-text)}
+  @media (prefers-reduced-motion: reduce){
+    .toggle,.toggle .knob,.collapsehead .chev{transition:none}
+    .adot.hold{animation:none;opacity:.6}
+  }
+
+  .fineprint{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-align:center;padding:14px 16px}
+  .fineprint.clickable{cursor:pointer}
+  .fineprint.clickable:hover{color:var(--text-dim);text-decoration:underline}
+
+  /* setup + walkthrough */
+  .tourgrid{display:grid;gap:8px;margin-top:10px}
+  .setuprow{min-height:34px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding-top:8px}
+  .setuprow .rlabel{font-size:12px;color:var(--text);flex:1}
+  .setuprow .dd-btn{height:28px;font-size:12px;min-width:116px}
+  /* first-run walkthrough overlay */
+  .tour-overlay{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+                padding:20px;background:rgba(0,0,0,.74)}
+  .tour-overlay.show{display:flex}
+  .tour-card{width:100%;max-width:332px;background:var(--surface);border:1px solid var(--border-strong);
+             border-radius:12px;padding:20px 18px 16px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+  .tour-ic{color:var(--text);margin-bottom:12px}
+  .tour-step-title{font-size:16px;font-weight:600;margin-bottom:8px}
+  .tour-step-body{font-size:13px;line-height:1.55;color:var(--text-dim);min-height:92px}
+  .tour-step-body b{color:var(--text);font-weight:600}
+  .tour-foot{display:flex;align-items:center;gap:8px;margin-top:18px}
+  .tour-dots{display:flex;gap:6px;flex:1}
+  .tour-dot{width:6px;height:6px;border-radius:50%;background:var(--border-strong)}
+  .tour-dot.on{background:var(--text)}
+  .tour-skip{font-size:12px;color:var(--text-faint);padding:0 6px}
+  .tour-skip:hover{color:var(--text-dim)}
+  .tour-back{height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:7px;font-size:13px;
+             color:var(--text-dim);align-items:center}
+  .tour-back:hover{background:var(--surface-2);color:var(--text)}
+  .tour-next{height:32px;padding:0 16px;border-radius:7px;background:var(--invert-bg);color:var(--invert-text);
+             font-size:13px;font-weight:600}
+  .tour-next:hover{background:var(--invert-bg-hover)}
+  .warnbar{display:none;padding:8px 16px;font-size:11px;line-height:1.4;color:var(--text-dim);
+           border-top:1px solid var(--border);background:var(--surface);font-family:var(--body)}
+  .warnbar.show{display:block}
+  .warnbar::before{content:"⚠ ";color:var(--text)}
+
+  /* targets */
+  .seg{display:flex;margin:12px 16px;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
+  .seg button{flex:1;height:30px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--text-dim)}
+  .seg button.active{background:var(--invert-bg);color:var(--invert-text);font-weight:700}
+  .listhead{display:flex;align-items:center;gap:8px;padding:0 16px 8px}
+  .listhead .targetview .dd-btn{min-width:78px}
+  .listactions{display:flex;align-items:center;gap:8px;flex:none;white-space:nowrap}
+  .btn2{height:30px;padding:0 12px;border:1px solid var(--border-strong);border-radius:6px;font-size:12px;
+        display:inline-flex;align-items:center;gap:7px}
+  .btn2:hover{background:var(--surface-2)}
+  .trow{height:40px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border)}
+  .targets-comfortable .trow{height:46px}
+  .targets-comfortable .ttitle{font-size:14px}
+  .targets-comfortable .texe{font-size:12px}
+  .trow:hover{background:var(--surface-2)}
+  .trow.gone .ttitle,.trow.gone .texe{color:var(--text-faint)}
+  .pill{width:64px;height:20px;flex:none;border-radius:999px;font-family:var(--mono);font-size:9px;letter-spacing:.08em;
+        display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid var(--border-strong);
+        color:var(--text-faint)}
+  .pill .adot2{width:4px;height:4px;border-radius:50%;border:1px solid currentColor;flex:none;display:none}
+  .pill.auto .adot2{display:block}
+  .pill.game{background:var(--invert-bg);border-color:var(--invert-bg);color:var(--invert-text)}
+  .pic{width:16px;height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;flex:none;
+       font-family:var(--mono);font-size:9px;color:var(--text-dim);display:grid;place-items:center}
+  .ttitle{font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .texe{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:none}
+  .emptystate{display:none;flex-direction:column;align-items:center;gap:10px;padding:48px 16px;color:var(--text-faint)}
+  .emptystate.show{display:flex}
+  .emptystate .et{font-size:13px}
+  .tsearch{width:auto;flex:1}
+  .trowwrap{border-bottom:1px solid var(--border)}
+  .trowwrap .trow{border-bottom:none}
+  .prow{display:none;flex-direction:column;gap:0;padding:0 16px 10px;background:var(--surface)}
+  .trowwrap.open .prow{display:flex}
+  .prow .prowrow{height:36px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim)}
+  .prow .prowrow .plabel{flex:1}
+  .prow .dd-btn{min-width:96px;font-size:12px;height:28px}
+  .prow .textinput{width:72px;height:28px}
+  .profbtn{height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;
+           font-size:11px;color:var(--text-faint);display:none;margin-left:auto;flex:none}
+  .trow:hover .profbtn{display:inline-flex;align-items:center}
+  .starbtn{width:22px;height:22px;flex:none;display:grid;place-items:center;border-radius:5px;color:var(--text-faint)}
+  .starbtn:hover{background:var(--surface-2);color:var(--text)}
+  .starbtn.on{color:var(--text)}
+  .keyseq{display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:160px;justify-content:flex-end}
+  .keychip{height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;
+           font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+  .keychip.rec{border-color:var(--text);color:var(--text)}
+  .row.hidden{display:none}
+  .tmeta{font-family:var(--mono);font-size:10px;color:var(--text-faint);flex:none;min-width:0;white-space:nowrap}
+  .trow.paused .ttitle{color:var(--text-faint);text-decoration:line-through}
+  .tdivider{height:28px;display:flex;align-items:center;padding:0 16px;font-family:var(--mono);font-size:10px;
+            letter-spacing:.08em;color:var(--text-faint);border-bottom:1px solid var(--border);background:rgba(255,255,255,.015)}
+  .factchips{display:flex;flex-wrap:wrap;gap:5px;padding:8px 0 4px}
+  .factchip{height:20px;padding:0 8px;border:1px solid var(--border);border-radius:999px;font-family:var(--mono);
+            font-size:9px;letter-spacing:.06em;color:var(--text-faint);display:inline-flex;align-items:center}
+  .factchip.hit{border-color:var(--border-strong);color:var(--text)}
+  .prowinfo{font-family:var(--mono);font-size:10px;color:var(--text-faint);padding:2px 0 6px;line-height:1.6}
+  .prowactions{display:flex;gap:6px;padding:4px 0 2px}
+  .prowactions .btn2{height:26px;font-size:11px;padding:0 9px}
+  .communitycard{border:1px solid var(--border);border-radius:6px;background:var(--surface-sunken);margin:4px 0 8px;padding:10px 10px 9px}
+  .communityhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .communitytitle{font:700 11px var(--mono);color:var(--text)}
+  .communitystatus{margin-left:auto;font:700 10px var(--mono);color:var(--text-faint);text-transform:uppercase}
+  .communitytext{font-size:11px;color:var(--text-dim);line-height:1.45;margin:0 0 7px}
+  .communitymeta{font:600 10px var(--mono);color:var(--text-faint);line-height:1.5;margin:0 0 7px}
+  .communityactions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .communityactions .btn2{height:24px;font-size:10px;padding:0 8px}
+  .collapsehead{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;
+                border-top:1px solid var(--border);cursor:pointer;user-select:none;background:rgba(255,255,255,.015)}
+  .collapsehead:hover{background:var(--surface)}
+  .collapsehead:hover .sectionlabel{padding:0;color:var(--text-dim)}
+  .collapsehead .sectionlabel{padding:0}
+  .collapsehead .chev{width:7px;height:7px;border-right:1.5px solid var(--text-dim);border-bottom:1.5px solid var(--text-dim);
+                     transform:rotate(45deg);transition:transform .12s}
+  .collapsehead.open .chev{transform:rotate(-135deg)}
+  .collapsehead.open{border-bottom:1px solid var(--border)}
+  .collapsebody{display:none}
+  .collapsebody.open{display:block}
+  .errbar{display:none;padding:8px 16px;font-size:11px;line-height:1.4;color:var(--text-dim);
+          border-top:1px solid var(--border);background:var(--surface);font-family:var(--body)}
+  .errbar.show{display:block}
+
+  /* stats */
+  .bignum{font-family:var(--mono);font-size:20px}
+  .midnum{font-family:var(--mono);font-size:14px}
+  .stable{padding:6px 16px 0}
+  .stable .sr{display:flex;align-items:center;height:32px;font-size:12px;color:var(--text-dim);gap:8px}
+  .stable .sr span:first-child{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stable .sr .m{font-family:var(--mono);color:var(--text);width:74px;text-align:right}
+  .stable .hr{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--text-faint)}
+  .resetwrap{padding:16px;display:flex;justify-content:center;gap:10px}
+  .logrows{padding:0 16px 8px}
+  .logrow{display:flex;align-items:baseline;gap:8px;min-height:24px;font-family:var(--mono);font-size:10px;
+          color:var(--text-dim);line-height:1.5}
+  .logrow .lat{color:var(--text-faint);flex:none}
+  .logrow .ltxt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .logrow.error .ltxt{color:var(--text)}
+  .daybar{position:relative;flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;min-width:40px}
+  .daybar i{position:absolute;left:0;top:0;bottom:0;background:var(--invert-bg);border-radius:3px}
+
+  /* settings */
+  .hotkey{height:30px;padding:0 11px;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;
+          font-family:var(--mono);font-size:12px}
+  .hotkey.rec{color:var(--text-faint)}
+  .staticvalue{height:30px;min-width:110px;padding:0 11px;background:var(--surface);border:1px solid var(--border);
+               border-radius:6px;display:inline-flex;align-items:center;justify-content:center;
+               color:var(--text-dim);font-size:12px}
+  .textinput{height:30px;width:132px;min-width:0;background:var(--surface);border:1px solid var(--border-strong);
+             border-radius:6px;padding:0 9px;color:var(--text);font:12px var(--mono)}
+  .textinput::placeholder{color:var(--text-faint)}
+  .iorow{display:flex;gap:10px;padding:14px 16px 0}
+  .iorow .btn2{flex:1;justify-content:center;height:32px;font-size:13px}
+  .btn2:disabled{cursor:default;color:var(--text-faint);border-color:var(--border);background:transparent}
+  .sectionlabel{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--text-faint);padding:11px 16px 5px}
+  .prowsummary{font-size:12px;color:var(--text-dim);padding:2px 16px 6px;line-height:1.45}
+  .prowdiag{font-size:11px;color:var(--text-faint);padding:0 16px 8px;line-height:1.45}
+  .btn2.on{background:var(--surface-2);border-color:var(--border-strong)}
+  .explaincard{margin:2px 16px 10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)}
+  .explaincard .factchips{padding:8px 0 2px}
+  .explaincard .prowdiag{padding:6px 0 0}
+  .explainreason{font-size:12px;color:var(--text);line-height:1.5}
+  .advdivider{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--text-faint);padding:10px 16px 4px}
+  .updatebox{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 16px 12px}
+  .ustatus{min-height:34px;font-size:12px;line-height:1.45;color:var(--text-dim)}
+  .ustatus b{font-family:var(--mono);font-weight:700;color:var(--text)}
+  .uactions{display:flex;gap:8px;margin-top:10px}
+  .uactions .btn2{flex:1;justify-content:center;height:30px;padding:0 8px}
+  .updateprompt{position:absolute;left:12px;right:12px;bottom:44px;z-index:25;display:none;align-items:center;
+                gap:10px;padding:10px;border:1px solid var(--border-strong);border-radius:8px;
+                background:var(--surface);box-shadow:0 12px 28px rgba(0,0,0,.45)}
+  .updateprompt.show{display:flex}
+  .upcopy{min-width:0;flex:1}
+  .upcopy b{display:block;font-size:12px;font-weight:600}
+  .upcopy span{display:block;margin-top:2px;font-size:11px;color:var(--text-dim);
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .upactions{display:flex;gap:6px;flex:none}
+  .upactions .btn2{height:28px;padding:0 9px}
+
+  /* toast stack (in-app notices) */
+  .toaststack{
+    position:absolute;left:12px;right:12px;bottom:88px;z-index:26;
+    display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;
+  }
+  .toast{
+    pointer-events:auto;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
+    border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);
+    box-shadow:0 12px 28px rgba(0,0,0,.45);animation:toast-in .18s ease-out;
+  }
+  .toast.error{border-color:#5c3030}
+  .toast.success{border-color:#2a4a2a}
+  .toast .tbrand{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--text-faint);flex:none;padding-top:1px}
+  .toast .tbody{flex:1;min-width:0}
+  .toast .tbody .ttext{font-size:12px;line-height:1.45;color:var(--text-dim)}
+  .toast.error .tbody .ttext{color:#ffb4b4}
+  .toast .tactions{display:flex;gap:6px;flex:none;align-items:flex-start}
+  .toast .tclose{width:22px;height:22px;border-radius:4px;color:var(--text-faint);font-size:14px;line-height:1;flex:none}
+  .toast .tclose:hover{background:var(--surface-2);color:var(--text)}
+  @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){
+    .toast{animation:none}
+  }
+
+  /* about */
+  .about{display:flex;flex-direction:column;align-items:center;padding:26px 16px 8px;gap:6px}
+  .about .glyph{width:32px;height:32px;margin:0 0 4px}
+  .aname{font-family:var(--mono);font-weight:700;font-size:17px;letter-spacing:.08em}
+  .aver{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
+  .adesc{font-size:13px;color:var(--text-dim);margin-top:4px}
+  .ameta{width:100%;display:grid;gap:4px;margin-top:6px;color:var(--text-faint);font:11px var(--mono);text-align:center;line-height:1.45}
+  .linkrow{height:40px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);
+           width:100%;font-size:13px;text-align:left}
+  .linkrow:hover{background:var(--surface-2)}
+  .linkrow::after{content:"";width:7px;height:7px;border-right:1.5px solid var(--text-dim);border-top:1.5px solid var(--text-dim);
+                  transform:rotate(45deg);margin-left:auto}
+  .safetyfull{line-height:1.5}
+  .aboutbox{display:none;width:100%;padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;
+            line-height:1.6;color:var(--text-dim);background:var(--surface);max-height:180px;overflow-y:auto;
+            white-space:pre-wrap;font-family:var(--mono)}
+  .aboutbox.show{display:block}
+  .aboutbox b{color:var(--text)}
+  .safetycompact{display:none}
+  .safety-compact .safetyfull,.safety-hidden .safetyfull{display:none}
+  .safety-compact .safetycompact{display:block}
+  .safety-hidden .safetycompact{display:none}
+
+  /* status bar (bottom edge) */
+  .statusbar{height:36px;flex:none;background:var(--surface);border-top:1px solid var(--border);
+             display:flex;align-items:center;padding:0 10px 0 16px;gap:10px;position:relative}
+  .status-main{display:flex;align-items:center;gap:0;flex:1;min-width:0}
+  .pulse{position:absolute;top:-1px;left:0;right:0;height:1px;background:var(--border);overflow:hidden}
+  .pulse .sweep{position:absolute;top:0;left:-25%;width:25%;height:1px;background:var(--text);opacity:0}
+  .pulse.fire .sweep{animation:sweep .6s linear}
+  @keyframes sweep{0%{left:-25%;opacity:1}100%{left:100%;opacity:1}}
+  @media (prefers-reduced-motion: reduce){
+    .pulse.fire .sweep{animation:flash .2s linear;left:0;width:100%}
+    @keyframes flash{0%{opacity:1}100%{opacity:0}}
+  }
+  .stext{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--text-faint);flex:1;min-width:0;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stext.armed{color:var(--text-dim)}
+  .status-tick{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--text);
+               flex:none;padding-left:10px;margin-left:10px;border-left:1px solid var(--border);line-height:1;
+               font-variant-numeric:tabular-nums}
+  .status-tick.show{display:block}
+  .adot{width:8px;height:8px;border-radius:50%;border:1px solid var(--text-dim);flex:none}
+  .adot.on{background:var(--text);border-color:var(--text)}
+  .adot.hold{animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .adot.off{visibility:hidden}
+  .suspend{width:24px;height:24px;flex:none;display:grid;place-items:center;border-radius:50%;color:var(--text-dim)}
+  .suspend:hover{background:var(--surface-2);color:var(--text)}
+  .suspend.on{background:var(--invert-bg);color:var(--invert-text)}
+  .suspend.on:hover{background:var(--invert-bg-hover)}
+</style>
+</head>
+<body>
+
+<div class="win" id="win">
+
+  <!-- header -->
+  <div class="titlebar">
+    <img class="glyph" src="data:image/png;base64,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" alt="">
+    <span class="appname">OMNAFK</span><span class="ver">v0.1.16</span>
+    <span class="sp"></span>
+    <button class="winbtn" id="pinBtn" aria-label="Pin flyout" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3L9 4z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></button>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-pane="targets" role="tab" aria-selected="true" aria-controls="pane-targets" aria-label="Sightline">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><line x1="12" y1="1" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="23"/><line x1="1" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="23" y2="12"/></svg>
+      <span class="tlabel">Sightline</span><span class="tbadge" id="targetsBadge"></span></button>
+    <button class="tab" data-pane="general" role="tab" aria-label="Keepalive">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span class="tlabel">Keepalive</span></button>
+    <button class="tab" data-pane="stats" role="tab" aria-label="Stats">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="20" x2="6" y2="12"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="9"/></svg>
+      <span class="tlabel">Stats</span></button>
+    <button class="tab" data-pane="settings" role="tab" aria-label="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2z"/></svg>
+      <span class="tlabel">Settings</span></button>
+    <button class="tab" data-pane="about" role="tab" aria-label="About">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="17"/><circle cx="12" cy="7.5" r=".5" fill="currentColor"/></svg>
+      <span class="tlabel">About</span></button>
+  </div>
+
+  <!-- content -->
+  <div class="content">
+
+    <!-- SIGHTLINE (default tab) -->
+    <div class="pane active" id="pane-targets">
+      <div class="seg">
+        <button id="segAuto" class="active">AUTO</button>
+        <button id="segManual">MANUAL</button>
+      </div>
+      <div class="listhead">
+        <div class="dropdown targetview" data-key="target_view" data-options="All Seen,Relevant,Marked" data-value="All Seen"></div>
+        <div class="dropdown targetview" data-key="target_sort" data-options="Status,Name" data-value="Status"></div>
+        <input class="textinput tsearch" id="targetSearch" spellcheck="false" autocomplete="off" placeholder="Filter…" aria-label="Filter targets">
+        <span class="listactions">
+          <button class="btn2" id="rescanBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Rescan</button>
+          <button class="help" data-tip="OMNAFK watches visible windows and marks likely games. Click a mark to overrule it: MARKED → IGNORED → back to automatic (the small dot means the mark is automatic).">?</button>
+        </span>
+      </div>
+      <div id="targetlist"></div>
+      <div class="emptystate" id="empty">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><line x1="12" y1="1" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="23"/><line x1="1" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="23" y2="12"/></svg>
+        <span class="et" id="emptyText">Nothing running. OMNAFK is watching.</span>
+      </div>
+      <div class="iorow">
+        <button class="btn2" id="testAllBtn">Test all</button>
+        <button class="btn2" id="ignoreAllBtn">Ignore all shown</button>
+        <button class="btn2" id="clearOverridesBtn">Reset overrides</button>
+      </div>
+      <div class="fineprint" id="armednote"></div>
+    </div>
+
+    <!-- KEEPALIVE -->
+    <div class="pane" id="pane-general">
+      <div class="sectionlabel">TIMING</div>
+      <div class="row">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
+        <span class="rlabel">Interval</span>
+        <div class="dropdown" data-key="interval" data-options="30 sec,1 min,2 min,5 min,9 min,14 min,Custom…" data-value="9 min"></div>
+        <input class="textinput" id="customInterval" type="number" min="10" max="3600" placeholder="sec" style="display:none;width:72px">
+        <button class="help" data-tip="How often OMNAFK sends the keepalive action to each game. “Custom…” accepts 10–3600 seconds.">?</button>
+      </div>
+      <div class="row">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 3"/><path d="M17 3l4 4"/></svg>
+        <span class="rlabel">Snooze</span>
+        <div class="dropdown" data-action="snooze" data-options="Off,30 min,1 hour,2 hours" data-value="Off"></div>
+        <button class="help" data-tip="Stop watching for a while without fully suspending. OMNAFK resumes by itself when the snooze ends.">?</button>
+      </div>
+      <div class="sectionlabel">INPUT</div>
+      <div class="row">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="8" width="18" height="9" rx="2"/><line x1="8" y1="12.5" x2="16" y2="12.5"/></svg>
+        <span class="rlabel">Action</span>
+        <div class="dropdown" data-key="action" data-options="Space tap,W tap,Camera nudge,Mouse wiggle,Scroll tick,Right click,Gamepad nudge,Key sequence…,Per-target…" data-value="W tap"></div>
+        <button class="help" data-tip="What input is sent each tick. “Per-target…” uses the profile set on each marked window in Sightline. “Gamepad nudge” sends a virtual controller stick flick for controller-gated games — it needs the ViGEmBus driver installed and may violate some games' terms of service.">?</button>
+      </div>
+      <div class="row hidden" id="keySequenceRow">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01"/></svg>
+        <span class="rlabel">Key sequence</span>
+        <div class="keyseq" id="globalKeySeq"></div>
+        <button class="help" data-tip="Click Record, then press up to 4 keys. Letters, Space, Enter, arrows, and Tab are supported.">?</button>
+      </div>
+      <div class="row">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M21 3l-9 9"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="rlabel">Adaptive action</span>
+        <button data-key="adaptive_actions" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        <button class="help" data-tip="Learns your movement keys while you play, then mimics them after about 20 samples. Per-target overrides in Sightline always win.">?</button>
+      </div>
+      <div class="sectionlabel">BEHAVIOR</div>
+      <div class="row">
+        <svg class="ric" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>
+        <span class="rlabel">Hold while I'm playing</span>
+        <button data-key="hold_while_playing" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        <button class="help" data-tip="Skips a tick if you've touched the game recently — it never fights you for the controls.">?</button>
+      </div>
+      <div class="row hidden" id="holdWinRow">
+        <span class="rlabel" style="color:var(--text-dim)">Hold time</span>
+        <div class="dropdown" data-key="hold_window_secs" data-options="15 sec,30 sec,1 min,2 min,5 min,10 min" data-value="1 min"></div>
+        <button class="help" data-tip="How long after your last input OMNAFK keeps holding before it treats you as away and resumes keepalives.">?</button>
+      </div>
+      <div class="collapsehead" id="generalAdvancedHead">
+        <span class="sectionlabel">ADVANCED</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="generalAdvancedBody">
+        <div class="advdivider">PRESETS & TIMING</div>
+        <div class="row">
+          <span class="rlabel">Quick preset</span>
+          <div class="dropdown" id="presetDd" data-options="—,Walking simulator,Long interval (Space),Camera AFK,Mouse only" data-value="—"></div>
+          <button class="help" data-tip="Optional bundles tuned by play style — not tied to one game. Walking simulator sends W taps often; Long interval (Space) uses a 9-minute Space tap; Camera AFK nudges the camera; Mouse only jiggles the cursor for menus and idle games.">?</button>
+        </div>
+        <div class="row" id="userPresetRow">
+          <span class="rlabel">Saved preset</span>
+          <div class="dropdown" id="userPresetDd"></div>
+          <button class="btn2" id="savePresetBtn" type="button">Save…</button>
+          <button class="btn2" id="deletePresetBtn" type="button">Delete</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Randomize timing</span>
+          <button data-key="randomize" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <button class="help" data-tip="Adds random jitter so actions never fire on a perfectly regular clock.">?</button>
+        </div>
+        <div class="row" id="jitterRow">
+          <span class="rlabel">Jitter amount</span>
+          <div class="dropdown" data-key="jitter_pct" data-options="±5%,±15%,±30%" data-value="±15%"></div>
+        </div>
+        <div class="advdivider">RECOVERY & LEARNING</div>
+        <div class="row">
+          <span class="rlabel">Auto-fallback on failure</span>
+          <button data-key="auto_fallback" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <button class="help" data-tip="Tries camera nudge, then mouse wiggle after repeated send failures.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Adaptive interval</span>
+          <button data-key="adaptive_interval" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+          <button class="help" data-tip="Keeps a freshly detected game awake quickly for the first few ticks (max 60s) to confirm the action works, then relaxes to your interval. Never slower than your setting.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Community intelligence</span>
+          <button data-key="community_intelligence" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          <button class="help" data-tip="Downloads shared game profiles and detection hints; may upload anonymous success stats.">?</button>
+        </div>
+        <div class="row hidden" id="communityErrorRow">
+          <span class="rlabel" style="color:var(--text-dim)">Manifest</span>
+          <span class="staticvalue" id="communityErrorText" style="flex:1;min-width:0;height:auto;padding:6px 11px;line-height:1.35"></span>
+        </div>
+        <div class="row hidden" id="adaptiveMinRow">
+          <span class="rlabel">Learning threshold</span>
+          <div class="dropdown" data-key="adaptive_min_samples" data-options="20 samples,50 samples,100 samples,200 samples" data-value="20 samples"></div>
+        </div>
+        <div class="row hidden" id="adaptiveSeqRow">
+          <span class="rlabel">Learn key combos</span>
+          <button data-key="adaptive_learn_sequences" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        </div>
+        <div class="row hidden" id="adaptiveActRow">
+          <span class="rlabel">Learn successful actions</span>
+          <button data-key="adaptive_learn_actions" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        </div>
+        <div class="advdivider">MONITOR PLACEMENT</div>
+        <div class="row">
+          <span class="rlabel">Move games to monitor</span>
+          <button data-key="monitor_placement" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        </div>
+        <div class="row hidden" id="monitorTargetRow">
+          <span class="rlabel">Target monitor</span>
+          <div class="dropdown" id="monitorDeviceDd"></div>
+        </div>
+        <div class="row hidden" id="monitorWhenRow">
+          <span class="rlabel">When</span>
+          <div class="dropdown" data-key="monitor_when" data-options="Always,On launch" data-value="Always"></div>
+        </div>
+        <div class="row hidden" id="monitorStyleRow">
+          <span class="rlabel">Placement style</span>
+          <div class="dropdown" data-key="monitor_style" data-options="Preserve size,Maximize,Fill work area,Fill monitor" data-value="Preserve size"></div>
+        </div>
+        <div class="row hidden" id="monitorSkipRow">
+          <span class="rlabel">Skip while I'm playing</span>
+          <button data-key="monitor_skip_active" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        </div>
+        <div class="row hidden" id="monitorSkipSecsRow">
+          <span class="rlabel">Skip window</span>
+          <div class="dropdown" data-key="monitor_skip_active_secs" data-options="3 sec,5 sec,10 sec,30 sec" data-value="5 sec"></div>
+        </div>
+        <div class="advdivider">EXPERT</div>
+        <div class="row">
+          <span class="rlabel">Keep all instances</span>
+          <button data-key="keep_all_instances" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          <button class="help" data-tip="For multi-boxing: keep every window of a game awake, not just one. Off keeps only the top window per game.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Rotate actions</span>
+          <button data-key="rotate_actions" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          <button class="help" data-tip="Cycle through W tap, Space tap, and camera nudge each tick instead of repeating one action, so input looks less mechanical.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Gamepad type</span>
+          <div class="dropdown" data-key="gamepad_kind" data-options="Xbox 360,DualShock 4" data-value="Xbox 360"></div>
+          <button class="help" data-tip="Which virtual controller the Gamepad nudge action emulates (needs ViGEmBus). Xbox 360 is read via XInput; DualShock 4 suits games that only accept PlayStation/DirectInput pads.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Background-only mode</span>
+          <button data-key="send_without_focus" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          <button class="help" data-tip="Legacy PostMessage delivery — most games ignore this. Leave off.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Only act when PC idle</span>
+          <div class="dropdown" data-key="idle_threshold_mins" data-options="Off,2 min,5 min,10 min,30 min" data-value="Off"></div>
+        </div>
+        <div class="row">
+          <span class="rlabel">Pause on battery</span>
+          <button data-key="pause_on_battery" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Pause when locked</span>
+          <button data-key="pause_when_locked" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Safety cap (hours)</span>
+          <div class="dropdown" data-key="max_session_hours" data-options="Off,4 h,8 h,12 h,24 h" data-value="Off"></div>
+        </div>
+        <div class="row">
+          <span class="rlabel">Safety cap (actions)</span>
+          <div class="dropdown" data-key="max_session_actions" data-options="Off,100,500,1000,5000" data-value="Off"></div>
+        </div>
+        <div class="row">
+          <span class="rlabel">Burst detection</span>
+          <button data-key="burst_detection" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Always mark exes</span>
+          <input class="textinput" id="alwaysMarkExes" spellcheck="false" autocomplete="off" placeholder="game.exe, other.exe" style="flex:1">
+          <button class="help" data-tip="Comma-separated exe names always treated as games, however they score.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Always ignore exes</span>
+          <input class="textinput" id="alwaysIgnoreExes" spellcheck="false" autocomplete="off" placeholder="zoom.exe, app.exe" style="flex:1">
+          <button class="help" data-tip="Comma-separated exe names never treated as games — the surest way to kill a false positive. Per-window pins still win.">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Mark if title has</span>
+          <input class="textinput" id="markTitleContains" spellcheck="false" autocomplete="off" placeholder="my game, arena" style="flex:1">
+          <button class="help" data-tip="Comma-separated text. Any visible window whose title contains one of these is marked as a game (overrides auto-detect; per-window pins still win).">?</button>
+        </div>
+        <div class="row">
+          <span class="rlabel">Ignore if title has</span>
+          <input class="textinput" id="ignoreTitleContains" spellcheck="false" autocomplete="off" placeholder="launcher, settings" style="flex:1">
+          <button class="help" data-tip="Comma-separated text. Any window whose title contains one of these is ignored. Mark rules win if both match.">?</button>
+        </div>
+      </div>
+      <div class="fineprint">Settings save automatically.</div>
+    </div>
+
+    <!-- STATS -->
+    <div class="pane" id="pane-stats">
+      <div class="seg">
+        <button id="segSession" class="active">SESSION</button>
+        <button id="segLifetime">ALL TIME</button>
+      </div>
+      <div class="row"><span class="rlabel" style="color:var(--text-dim)" id="lblKept">Time kept alive</span><span class="bignum" id="statSession">00:00:00</span></div>
+      <div class="row"><span class="rlabel" style="color:var(--text-dim)" id="lblActions">Actions sent</span><span class="midnum" id="statActions">0</span></div>
+      <div class="row"><span class="rlabel" style="color:var(--text-dim)">Games seen today</span><span class="midnum" id="statSeen">0</span></div>
+      <div class="row"><span class="rlabel" style="color:var(--text-dim)">Current unbroken streak</span><span class="midnum" id="statCurStreak">00:00:00</span></div>
+      <div class="row"><span class="rlabel" style="color:var(--text-dim)">Longest unbroken streak</span><span class="midnum" id="statStreak">00:00:00</span></div>
+      <div class="stable">
+        <div class="sr hr"><span>MARKED</span><span class="m" id="hdrUptime">UPTIME</span><span class="m">ACTIONS</span></div>
+        <div id="statRows"><div class="sr"><span style="color:var(--text-faint)">—</span><span class="m"></span><span class="m"></span></div></div>
+      </div>
+      <div class="collapsehead" id="statsMoreHead">
+        <span class="sectionlabel">MORE STATS & LOG</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="statsMoreBody">
+      <div class="sectionlabel" id="typeHdr">ACTIONS BY TYPE</div>
+      <div class="stable" id="typeTable">
+        <div id="typeRows"></div>
+      </div>
+      <div class="sectionlabel">DAILY HISTORY</div>
+      <div class="stable" id="dailyTable">
+        <div class="sr hr"><span>DAY</span><span class="m">KEPT</span><span class="m">ACTIONS</span></div>
+        <div id="dailyRows"></div>
+      </div>
+      <div class="sectionlabel">ACTIVITY</div>
+      <div class="logrows" id="logRows"><div class="logrow"><span class="ltxt" style="color:var(--text-faint)">No activity yet.</span></div></div>
+      </div>
+      <div class="resetwrap">
+        <button class="btn2" id="exportStatsBtn">Export CSV</button>
+        <button class="btn2" id="resetBtn">Reset statistics</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="pane" id="pane-settings">
+      <div class="sectionlabel">STARTUP</div>
+      <div class="row"><span class="rlabel">Start with Windows</span><button data-key="autostart" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+      <div class="fineprint" id="autostartStatus" style="padding-top:0;margin-top:-6px"></div>
+      <div class="row"><span class="rlabel">Show flyout on launch</span><button data-key="show_on_launch" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button></div>
+      <div class="sectionlabel">DETECTION</div>
+      <div class="row"><span class="rlabel">Sight sensitivity</span>
+        <div class="dropdown" data-key="sensitivity" data-options="Strict,Standard,Broad" data-value="Standard"></div>
+        <button class="help" data-tip="Strict only wakes for unambiguous games. Broad marks anything that plausibly wants keepalives — emulators, remote sessions, browser games.">?</button>
+      </div>
+      <div class="row"><span class="rlabel">Remember pinned position</span><button data-key="remember_pin" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+      <div class="sectionlabel">HOTKEYS</div>
+      <div class="row"><span class="rlabel">Global hotkey (open flyout)</span><button class="hotkey" id="hotkey">CTRL+ALT+K</button></div>
+      <div class="row"><span class="rlabel">Suspend hotkey</span><button class="hotkey" id="suspendHotkey">NONE</button>
+        <button class="help" data-tip="Optional global shortcut that toggles suspend without opening the flyout. While recording, press Esc to clear it.">?</button>
+      </div>
+      <div class="sectionlabel">NOTIFICATIONS</div>
+      <div class="row"><span class="rlabel">Notifications</span><div class="dropdown" data-key="notifications" data-options="All,Errors only,None" data-value="Errors only"></div>
+        <button class="help" data-tip="All also notifies when targets arm/disarm and on the first keepalive. Errors only warns when input can't be delivered.">?</button>
+      </div>
+      <div class="row"><span class="rlabel">Quiet hours</span><button data-key="quiet_hours_enabled" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        <button class="help" data-tip="Keepalives are held between these times. Windows stay tracked; sending resumes when the window ends.">?</button>
+      </div>
+      <div class="row hidden" id="quietRow">
+        <span class="rlabel" style="color:var(--text-dim)">From / until</span>
+        <input class="textinput" id="quietStart" type="time" value="23:00" style="width:90px">
+        <input class="textinput" id="quietEnd" type="time" value="07:00" style="width:90px">
+      </div>
+      <div class="row hidden" id="quietDaysRow">
+        <span class="rlabel" style="color:var(--text-dim)">On days</span>
+        <div class="dropdown" data-key="quiet_days" data-options="Every day,Weekdays,Weekends" data-value="Every day"></div>
+      </div>
+      <div class="row"><span class="rlabel">Log activity to file</span><button data-key="file_logging" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        <button class="btn2" id="openLogBtn">Open log</button>
+      </div>
+      <div class="sectionlabel">AWAY ALERTS</div>
+      <div class="row"><span class="rlabel">Phone alerts</span><button data-key="remote_alerts" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        <button class="help" data-tip="Push a notification to your phone when keepalives stop while you're away (battery, lock, safety cap) or an error occurs. Needs the ntfy app (subscribe to your topic) and/or a Discord webhook.">?</button>
+      </div>
+      <div class="row hidden" id="ntfyRow">
+        <span class="rlabel" style="color:var(--text-dim)">ntfy topic</span>
+        <input class="textinput" id="ntfyTopic" spellcheck="false" autocomplete="off" placeholder="omnafk-… or https://your-ntfy" style="flex:1">
+      </div>
+      <div class="row hidden" id="discordRow">
+        <span class="rlabel" style="color:var(--text-dim)">Discord webhook</span>
+        <input class="textinput" id="discordWebhook" spellcheck="false" autocomplete="off" placeholder="https://discord.com/api/webhooks/…" style="flex:1">
+      </div>
+      <div class="row hidden" id="alertTestRow">
+        <span class="rlabel" style="color:var(--text-dim)">Test delivery</span>
+        <button class="btn2" id="testAlertBtn">Send test</button>
+      </div>
+      <div class="sectionlabel">APP MODE</div>
+      <div class="row"><span class="rlabel">Headless (tray only)</span><button data-key="headless" class="toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+        <button class="help" data-tip="Never opens the flyout on launch or when a second instance is started. OMNAFK lives in the tray only.">?</button>
+      </div>
+      <div class="row">
+        <span class="rlabel">Auto-elevate for admin games</span>
+        <button data-key="auto_elevate" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button>
+        <button class="help" data-tip="When a marked game runs as administrator, OMNAFK can restart elevated so Windows allows input. You still approve the UAC prompt.">?</button>
+      </div>
+      <div class="row"><span class="rlabel">Elevation</span><button class="btn2" id="restartAdminBtn">Restart as administrator</button>
+        <button class="help" data-tip="OMNAFK restarts elevated automatically when it detects an admin game. Use this button only if you dismissed the UAC prompt.">?</button>
+      </div>
+      <div class="collapsehead" id="interfaceCollapseHead">
+        <span class="sectionlabel">INTERFACE</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="interfaceCollapseBody">
+        <div class="row"><span class="rlabel">Theme</span><div class="dropdown" data-key="theme" data-options="Dark,High contrast" data-value="Dark"></div></div>
+        <div class="row"><span class="rlabel">Sightline density</span><div class="dropdown" data-key="target_density" data-options="Compact,Comfortable" data-value="Compact"></div></div>
+        <div class="row"><span class="rlabel">Tab labels</span><div class="dropdown" data-key="tab_label_mode" data-options="Active only,Always,Icons only" data-value="Active only"></div></div>
+        <div class="row"><span class="rlabel">Version display</span><div class="dropdown" data-key="version_display" data-options="Title + About,About only,Hidden" data-value="Title + About"></div></div>
+        <div class="row"><span class="rlabel">Safety note</span><div class="dropdown" data-key="safety_note_display" data-options="Compact,Full,Hidden" data-value="Compact"></div></div>
+        <div class="row"><span class="rlabel">Update prompts</span><div class="dropdown" data-key="update_prompt_mode" data-options="Automatic,Card + toast,Card only,Manual only" data-value="Automatic"></div>
+          <button class="help" data-tip="Automatic downloads, verifies, and installs new releases on launch (skipped while a game is being kept awake). The others only notify; you click Update.">?</button>
+        </div>
+      </div>
+      <div class="collapsehead" id="updatesCollapseHead">
+        <span class="sectionlabel">GITHUB UPDATES</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="updatesCollapseBody">
+        <div class="row"><span class="rlabel">Repository</span><input class="textinput" id="githubRepo" spellcheck="false" autocomplete="off" placeholder="owner/repo"></div>
+        <div class="row"><span class="rlabel">Check on launch</span><button data-key="check_updates_on_launch" class="toggle on" role="switch" aria-checked="true"><span class="knob"></span></button></div>
+        <div class="updatebox">
+          <div class="ustatus" id="updateStatus">No GitHub repository connected.</div>
+          <div class="uactions">
+            <button class="btn2" id="checkUpdateBtn">Check now</button>
+            <button class="btn2" id="openLatestBtn" disabled>Latest</button>
+            <button class="btn2" id="openReleasesBtn">Releases</button>
+            <button class="btn2" id="openRepoBtn">GitHub</button>
+          </div>
+        </div>
+      </div>
+      <div class="collapsehead" id="maintenanceCollapseHead">
+        <span class="sectionlabel">MAINTENANCE</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="maintenanceCollapseBody">
+        <div class="iorow"><button class="btn2" id="importBtn">Import settings</button><button class="btn2" id="exportBtn">Export settings</button></div>
+        <div class="iorow"><button class="btn2" id="resetSettingsBtn">Reset to defaults</button><button class="btn2" id="openConfigBtn">Open config folder</button></div>
+        <div class="fineprint clickable" id="cfgPath" title="Open the config folder">CONFIG: %APPDATA%\OMNAFK\config.json</div>
+      </div>
+    </div>
+
+    <!-- ABOUT -->
+    <div class="pane" id="pane-about">
+      <div class="about">
+        <img class="glyph" src="data:image/png;base64,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9tuTX73llutn/+53v3vxueee+c+zzz695P77759Ar1u9enVoTU3lc2azuY15hNjc3Pwv4n132Ht+fSMnP+e0d9euXVNtNhvdo1jweDxibm4u3rx5806v1+tobGz8KoDXf8FFPnrLjQ0691dUVPQiSTTVrV69ut1sNgt0nYXFYmnatm3bFexAsQAcPXr0JGpuZGVlSam0IUANBYD4r7766pOTJ08qz5w5k9fU1JRVWlq68R//+MfUtLQ0jr3nwoULb0xJSUmaM2fOzPnzH1732GPz1915553xTzzx2J3z58+fxgImLS2N27r1m7tqlbXbGhoass6cOaPKy8tTrV+//l0AUCQmJspoW9LT0yXMxFGEhITEUqeG1QQAALm5uTc6nU4nxljEGAv19fXeJUuWFKtUKjXGGB88ePCeASSlB4NWQX2RSEO10za7pweHMUZffvnlBLvdbuF5nv/ss89qq6qqrDSL2W636/fs2XNlJx2OAADGjx8/OTn55gXz5s37DetVkxAYSk5OlgJAPABcCQAxxKNlbWSUkpLSQeUghODBBx9MSE5Ojr3zzjvjH3744bF+z+QC9FdYSEhIUmRkZBIAxKalpUkRQhR4He2+4YYbps6ePXvB2LFjRwXqd0o0FxQUPOhyuXiSuCru3r277dtvv1URCa5ctGhRRCfJsUMNwH5p2O6C9YMJwA4uTKVSpRPpZ8nKytJQNeZwOBxHjx69kZUOndAZcP/99zyycuVKZW5u7scbN27sAMzixYuD586dG5KamhpE1XdqamrIxo0bqfRBBCTSAHZVIA6Py8rKkhKp2ZHIunjx4uAJEyYoiNqXzp49O2LRokUdKnbPnj1X/vvf//5hwYIF66+88sopfjasvxMlJVphoc/nwxhjwev1Chs3bixvbm62kAJHg7HRIeqj4BpQ9A8J00077ujRo3f7fD7scrk8R44c0RGimXe73QKThSzt5l4IAGDTpk2pNpsNu1wuT3Nz88qtW7eOo0C69957I5KTk0eMHz8+LjY2NiYlJUVGQHfOu27btu2ympqaZ3U63Vaj0Vin1+vLtFrtp5WVlfPXrFkzKgChLE1NTQ2KjIyMSkhIiLv55ptjEhISIiihnZWVNV2r1W4i8dyGJUteS+pJRIO+85kzZ/5A15jo9XrPgQMHmskCKd++ffuu6SblrK94GJTd04eVTYox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" alt="" style="width:48px;height:48px">
+        <span class="aname">OMNAFK</span>
+        <span class="aver">v0.1.16</span>
+        <span class="adesc">Awake when you aren't.</span>
+        <div class="ameta">
+          <span>SIGHTLINE MARKS TARGETS AUTOMATICALLY</span>
+          <span>STABLE UPDATES · LOCAL SETTINGS</span>
+        </div>
+      </div>
+      <div class="sectionlabel">UPDATES</div>
+      <button class="linkrow" id="aboutUpdateBtn">Check for updates</button>
+      <button class="linkrow" id="aboutChangelogBtn">Release notes</button>
+      <button class="linkrow" id="aboutTourBtn">Replay walkthrough</button>
+      <div class="aboutbox" id="changelogBox"></div>
+      <div class="sectionlabel">SUPPORT</div>
+      <button class="linkrow" id="aboutRepoBtn">GitHub repository</button>
+      <button class="linkrow" id="aboutIssueBtn">Bug report</button>
+      <div class="collapsehead" id="aboutDetailsHead">
+        <span class="sectionlabel">DETAILS</span><span class="chev"></span>
+      </div>
+      <div class="collapsebody" id="aboutDetailsBody">
+        <button class="linkrow" id="aboutDiagBtn">Copy diagnostics</button>
+        <button class="linkrow" id="aboutLicenseBtn">License (MIT)</button>
+        <div class="aboutbox" id="licenseBox">MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.</div>
+        <button class="linkrow" id="aboutCreditsBtn">Open-source credits</button>
+        <div class="aboutbox" id="creditsBox">Built with:
+<b>Tauri 2</b> — app framework (MIT/Apache-2.0)
+<b>windows-rs</b> — Win32 bindings (MIT/Apache-2.0)
+<b>serde / serde_json</b> — config & IPC (MIT/Apache-2.0)
+<b>reqwest</b> — GitHub update checks (MIT/Apache-2.0)
+<b>chrono, rand, parking_lot, tracing</b> (MIT/Apache-2.0)
+<b>Segoe UI / Cascadia Code</b> — system typefaces</div>
+      </div>
+      <div class="fineprint safetycompact">SAFETY NOTE: USE OMNAFK AT YOUR OWN DISCRETION.</div>
+      <div class="fineprint safetyfull">SENDING AUTOMATED INPUT MAY VIOLATE THE TERMS OF SERVICE OF SOME GAMES. USE AT YOUR OWN DISCRETION.</div>
+    </div>
+  </div>
+
+  <div class="warnbar" id="warnbar"><span id="warnText"></span> <button class="btn2" id="warnRestartAdminBtn">Restart as admin</button></div>
+  <div class="errbar" id="errbar" title="Open the activity log"></div>
+  <div class="toaststack" id="toastStack" aria-live="polite"></div>
+  <div class="updateprompt" id="updatePrompt" aria-live="polite">
+    <div class="upcopy">
+      <b id="updatePromptTitle">Update available</b>
+      <span id="updatePromptBody"></span>
+    </div>
+    <div class="upactions">
+      <button class="btn2" id="updatePromptOpen">Update</button>
+      <button class="btn2" id="updatePromptIgnore">Ignore</button>
+    </div>
+  </div>
+  <!-- status bar -->
+  <div class="statusbar">
+    <div class="pulse" id="pulse"><div class="sweep"></div></div>
+    <div class="status-main" id="statusMain">
+      <span class="stext" id="stext">DORMANT — WATCHING</span>
+      <span class="status-tick" id="statusTick" aria-label="Next tick"></span>
+    </div>
+    <span class="adot" id="adot"></span>
+    <button class="suspend" id="suspendBtn" title="Suspend OMNAFK" aria-pressed="false">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>
+    </button>
+  </div>
+
+  <!-- first-run walkthrough -->
+  <div class="tour-overlay" id="tourOverlay">
+    <div class="tour-card">
+      <svg class="tour-ic" id="tourIc" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"></svg>
+      <div class="tour-step-title" id="tourTitle"></div>
+      <div class="tour-step-body" id="tourBody"></div>
+      <div class="tour-foot">
+        <div class="tour-dots" id="tourDots"></div>
+        <button class="tour-skip" id="tourSkip">Skip</button>
+        <button class="tour-back" id="tourBack" style="display:none">Back</button>
+        <button class="tour-next" id="tourNext">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+
+// OMNAFK frontend runtime — talks to the Rust backend via the contract in docs/IPC.md.
+
+const T = window.__TAURI__ || null;
+const inv = (cmd,args)=> T ? T.core.invoke(cmd,args) : Promise.resolve(null);
+
+const KEYMAP_ADAPTIVE_SAMPLES={'20 samples':20,'50 samples':50,'100 samples':100,'200 samples':200};
+const KEYMAP_INTERVAL={'30 sec':30,'1 min':60,'2 min':120,'5 min':300,'9 min':540,'14 min':840};
+const KEYMAP_JITTER={'±5%':5,'±15%':15,'±30%':30};
+const KEYMAP_HOLDWIN={'15 sec':15,'30 sec':30,'1 min':60,'2 min':120,'5 min':300,'10 min':600};
+const KEYMAP_IDLE={'Off':0,'2 min':2,'5 min':5,'10 min':10,'30 min':30};
+const KEYMAP_HOURS={'Off':0,'4 h':4,'8 h':8,'12 h':12,'24 h':24};
+const KEYMAP_MAXACTIONS={'Off':0,'100':100,'500':500,'1000':1000,'5000':5000};
+const KEYMAP_SNOOZE={'Off':0,'30 min':30,'1 hour':60,'2 hours':120};
+const KEYMAP_MONITOR_SKIP={'3 sec':3,'5 sec':5,'10 sec':10,'30 sec':30};
+const NUMERIC_KEYMAPS={interval:KEYMAP_INTERVAL,jitter_pct:KEYMAP_JITTER,hold_window_secs:KEYMAP_HOLDWIN,
+  idle_threshold_mins:KEYMAP_IDLE,max_session_hours:KEYMAP_HOURS,max_session_actions:KEYMAP_MAXACTIONS,
+  monitor_skip_active_secs:KEYMAP_MONITOR_SKIP,adaptive_min_samples:KEYMAP_ADAPTIVE_SAMPLES};
+const TARGET_VIEW_TO_CONFIG={'All Seen':'All','Relevant':'Clean','Marked':'Games only'};
+const TARGET_VIEW_TO_LABEL={'All':'All Seen','Clean':'Relevant','Games only':'Marked'};
+const PROFILE_ACTIONS=['Use global','Space tap','W tap','Camera nudge','Mouse wiggle','Scroll tick','Right click','Gamepad nudge','Key sequence…'];
+const PROFILE_INTERVALS=['Use global','30 sec','1 min','2 min','5 min','9 min','14 min','Custom…'];
+const PROFILE_BEHAVIOR=['Use global','On','Off'];
+const PROFILE_HOLDWIN=['Use global','15 sec','30 sec','1 min','2 min','5 min','10 min'];
+const QUIET_TARGET_EXES=new Set(['applicationframehost.exe','systemsettings.exe','omnafk.exe','explorer.exe','shellexperiencehost.exe','searchhost.exe','startmenuexperiencehost.exe','textinputhost.exe','runtimebroker.exe']);
+let targetFilter='';
+let openProfileId=null;
+let explainOpenId=null;   // which target's "Why?" breakdown is expanded
+let explainCache={};      // id -> last fetched DetectionExplanation, to survive re-renders
+let customIntervalActive=false;  // user picked "Custom…" — keep the input visible across re-renders
+let statsView='session';
+let monitorsCache=[];
+
+// ---------- tabs ----------
+const tabs=[...document.querySelectorAll('.tab')];
+const tablist=document.querySelector('.tabs');
+function activatePane(name,persist=true){
+  tabs.forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false')});
+  const t=tabs.find(x=>x.dataset.pane===name);
+  if(!t)return;
+  t.classList.add('active');t.setAttribute('aria-selected','true');
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  const pane=document.getElementById('pane-'+name);
+  if(pane)pane.classList.add('active');
+  if(persist)inv('set_config',{key:'last_tab',value:name});
+}
+tabs.forEach((t,i)=>{
+  t.setAttribute('aria-controls','pane-'+t.dataset.pane);
+  t.addEventListener('click',()=>activatePane(t.dataset.pane));
+  t.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+    e.preventDefault();
+    const next=e.key==='ArrowRight'?(i+1)%tabs.length:(i-1+tabs.length)%tabs.length;
+    tabs[next].focus();activatePane(tabs[next].dataset.pane);
+  });
+});
+
+// ---------- generic controls -> set_config ----------
+function cfgValue(key,label){
+  if(key==='interval'&&label==='Custom…')return Number(document.getElementById('customInterval').value)||540;
+  if(key==='target_view')return TARGET_VIEW_TO_CONFIG[label]||label;
+  const map=NUMERIC_KEYMAPS[key];
+  if(map)return map[label]??(key==='interval'?540:0);
+  return label;
+}
+function labelFor(key,val){
+  if(key==='target_view')return TARGET_VIEW_TO_LABEL[val]||val;
+  const map=NUMERIC_KEYMAPS[key];
+  if(map){
+    for(const[k,v]of Object.entries(map))if(v===val)return k;
+    return key==='interval'?'Custom…':String(val);
+  }
+  return val;
+}
+function setClass(base,options,active){
+  options.forEach(name=>base.classList.toggle(name,name===active));
+}
+function syncCustomIntervalUI(c){
+  const input=document.getElementById('customInterval');
+  const preset=Object.values(KEYMAP_INTERVAL).includes(c.interval);
+  // Keep the field visible while the user is entering a custom value, even
+  // though the saved interval is still a preset until they commit one.
+  const showCustom=!preset||customIntervalActive;
+  input.style.display=showCustom?'inline-block':'none';
+  if(!preset&&document.activeElement!==input)input.value=c.interval;
+  const dd=document.querySelector('.dropdown[data-key="interval"]');
+  if(dd)dd._set(showCustom?'Custom…':labelFor('interval',c.interval));
+}
+function syncActionUI(c){
+  const row=document.getElementById('keySequenceRow');
+  const show=c.action==='Key sequence…';
+  row.classList.toggle('hidden',!show);
+  if(show)renderKeySeqUI(document.getElementById('globalKeySeq'),c.key_sequence||[],keys=>{
+    inv('set_config',{key:'key_sequence',value:keys}).then(st=>st&&apply(st));
+  });
+}
+function syncAdaptiveUI(c){
+  const on=!!c.adaptive_actions;
+  ['adaptiveMinRow','adaptiveSeqRow','adaptiveActRow'].forEach(id=>{
+    document.getElementById(id)?.classList.toggle('hidden',!on);
+  });
+}
+function monitorDeviceToLabel(device,fallback='Off'){
+  if(!device||device==='Off'||device==='Use global'||device==="Don't move")return device||fallback;
+  const hit=monitorsCache.find(m=>m.device===device);
+  return hit?hit.label:device;
+}
+function monitorLabelToDevice(label){
+  if(!label||label==='Off'||label==='Use global'||label==="Don't move")return label==='Off'?'Off':label;
+  const hit=monitorsCache.find(m=>m.label===label);
+  return hit?hit.device:label;
+}
+function monitorProfileOptions(){
+  return ['Use global',"Don't move",...monitorsCache.map(m=>m.label)];
+}
+function profileMonitorLabel(profile,placementEnabled){
+  if(profile&&profile.monitor){
+    if(profile.monitor==="Don't move")return "Don't move";
+    return monitorDeviceToLabel(profile.monitor,profile.monitor);
+  }
+  return placementEnabled?'Use global':'Use global';
+}
+function ddItem(label,selected){
+  const it=document.createElement('button');
+  it.className='dd-item'+(selected?' sel':'');
+  const dot=document.createElement('span');
+  dot.className='dot';
+  it.append(dot,document.createTextNode(label));
+  return it;
+}
+function bindConfigDropdown(dd,options,current,onPick){
+  const btn=document.createElement('button');btn.className='dd-btn';btn.textContent=current;
+  const menu=document.createElement('div');menu.className='dd-menu';
+  options.forEach(o=>{
+    const it=ddItem(o,o===current);
+    it.addEventListener('click',e=>{e.stopPropagation();btn.textContent=o;dd.classList.remove('open');
+      menu.querySelectorAll('.dd-item').forEach(x=>x.classList.remove('sel'));it.classList.add('sel');
+      onPick(o);});
+    menu.appendChild(it);
+  });
+  btn.addEventListener('click',e=>{e.stopPropagation();
+    document.querySelectorAll('.dropdown.open').forEach(x=>x!==dd&&x.classList.remove('open'));
+    dd.classList.toggle('open');});
+  dd.innerHTML='';dd.append(btn,menu);
+  dd._set=(label)=>{btn.textContent=label;
+    menu.querySelectorAll('.dd-item').forEach(x=>x.classList.toggle('sel',x.textContent.trim()===label));};
+}
+function refreshMonitorDeviceDropdown(currentLabel='Off'){
+  const dd=document.getElementById('monitorDeviceDd');
+  if(!dd)return;
+  const options=['Off',...monitorsCache.map(m=>m.label)];
+  bindConfigDropdown(dd,options,currentLabel,label=>{
+    inv('set_config',{key:'monitor_device',value:monitorLabelToDevice(label)})
+      .then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+  });
+}
+function refreshUserPresetDropdown(names){
+  const dd=document.getElementById('userPresetDd');
+  if(!dd)return;
+  const options=['—',...(names||[])];
+  bindConfigDropdown(dd,options,'—',label=>{
+    if(label==='—')return;
+    inv('apply_user_preset',{name:label}).then(st=>{
+      if(st){apply(st);dd._set('—');}
+    }).catch(err=>showError(String(err)));
+  });
+}
+function renderAutostartStatus(c){
+  const el=document.getElementById('autostartStatus');
+  if(!el)return;
+  const labels={
+    ok:'Registered at login',
+    missing:'Not registered — toggle off/on or check Windows Startup settings',
+    mismatch:'Wrong path registered — OMNAFK retried registration',
+    disabled:'Start with Windows is off',
+  };
+  const text=labels[c.autostart_status]||'';
+  el.textContent=text;
+  el.style.display=text&&(c.autostart_status!=='ok'||c.autostart)?'block':'none';
+}
+function renderCommunityStatus(st){
+  const row=document.getElementById('communityErrorRow');
+  const text=document.getElementById('communityErrorText');
+  if(!row||!text)return;
+  const show=!!st.config.community_intelligence&&!!st.community_last_error;
+  row.classList.toggle('hidden',!show);
+  if(show)text.textContent="Couldn't refresh manifest — using cache. "+st.community_last_error;
+}
+function syncMonitorUI(c){
+  const on=!!c.monitor_placement;
+  ['monitorTargetRow','monitorWhenRow','monitorStyleRow','monitorSkipRow','monitorSkipSecsRow']
+    .forEach(id=>document.getElementById(id)?.classList.toggle('hidden',!on));
+  if(on){
+    const label=monitorDeviceToLabel(c.monitor_device,'Off');
+    refreshMonitorDeviceDropdown(label);
+  }
+}
+
+document.querySelectorAll('.dropdown').forEach(dd=>{
+  if(!dd.dataset.options)return;
+  const opts=dd.dataset.options.split(',');let val=dd.dataset.value;
+  const btn=document.createElement('button');btn.className='dd-btn';btn.textContent=val;
+  const menu=document.createElement('div');menu.className='dd-menu';
+  opts.forEach(o=>{
+    const it=ddItem(o,o===val);
+    it.addEventListener('click',e=>{e.stopPropagation();val=o;btn.textContent=o;
+      menu.querySelectorAll('.dd-item').forEach(x=>x.classList.remove('sel'));it.classList.add('sel');
+      dd.classList.remove('open');
+      if(dd.dataset.action==='snooze'){
+        inv('snooze',{minutes:KEYMAP_SNOOZE[o]??0}).then(st=>st&&apply(st));
+        return;
+      }
+      if(dd.id==='presetDd'){
+        if(o!=='—')inv('apply_preset',{name:o}).then(st=>{
+          if(st){apply(st);dd._set('—');}
+        }).catch(err=>showError(String(err)));
+        return;
+      }
+      if(dd.dataset.key==='interval'&&o==='Custom…'){
+        customIntervalActive=true;
+        const input=document.getElementById('customInterval');
+        input.style.display='inline-block';input.focus();
+        return;
+      }
+      if(dd.dataset.key==='interval'){customIntervalActive=false;document.getElementById('customInterval').style.display='none';}
+      if(dd.dataset.key)inv('set_config',{key:dd.dataset.key,value:cfgValue(dd.dataset.key,o)})
+        .then(st=>st&&apply(st))
+        .catch(err=>showError(String(err)));});
+    menu.appendChild(it);
+  });
+  btn.addEventListener('click',e=>{e.stopPropagation();
+    document.querySelectorAll('.dropdown.open').forEach(x=>x!==dd&&x.classList.remove('open'));
+    dd.classList.toggle('open');});
+  dd.append(btn,menu);
+  dd._set=(label)=>{val=label;btn.textContent=label;
+    menu.querySelectorAll('.dd-item').forEach(x=>x.classList.toggle('sel',x.textContent.trim()===label));};
+});
+document.getElementById('customInterval').addEventListener('change',function(){
+  const v=Math.max(10,Math.min(3600,Number(this.value)||540));
+  this.value=v;inv('set_config',{key:'interval',value:v}).then(st=>st&&apply(st));
+});
+document.addEventListener('click',()=>{
+  document.querySelectorAll('.dropdown.open').forEach(x=>x.classList.remove('open'));
+  document.querySelectorAll('.help.open').forEach(x=>x.classList.remove('open'));
+});
+document.addEventListener('click',e=>{const t=e.target.closest('.toggle');
+  if(t){const on=!t.classList.contains('on');
+    t.classList.toggle('on',on);t.setAttribute('aria-checked',on);
+    if(t.dataset.key)inv('set_config',{key:t.dataset.key,value:on});}});
+document.querySelectorAll('.help').forEach(h=>{
+  const tip=document.createElement('span');tip.className='tip';tip.textContent=h.dataset.tip;h.appendChild(tip);
+  h.addEventListener('click',e=>{e.stopPropagation();
+    document.querySelectorAll('.help.open').forEach(x=>x!==h&&x.classList.remove('open'));
+    h.classList.toggle('open');});
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='F1'){const h=document.activeElement?.closest?.('.row')?.querySelector('.help');
+    if(h){e.preventDefault();h.classList.add('open');}}
+});
+
+function renderKeySeqUI(host,keys,onSave){
+  host.innerHTML='';
+  keys.forEach(k=>{const c=document.createElement('span');c.className='keychip';c.textContent=k;host.appendChild(c);});
+  const rec=document.createElement('button');rec.className='keychip';rec.textContent=keys.length?'Add':'Record';
+  host.appendChild(rec);
+  if(keys.length){const clr=document.createElement('button');clr.className='keychip';clr.textContent='Clear';
+    clr.addEventListener('click',e=>{e.stopPropagation();onSave([]);});host.appendChild(clr);}
+  rec.addEventListener('click',e=>{e.stopPropagation();startKeyCapture(rec,keys,onSave);});
+}
+function startKeyCapture(btn,existing,onSave){
+  btn.textContent='…';btn.classList.add('rec');
+  const keys=[...existing];
+  const f=ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    if(['Control','Alt','Shift','Meta'].includes(ev.key))return;
+    let name=ev.key.length===1?ev.key.toUpperCase():ev.key.toUpperCase().replace(' ','');
+    if(ev.key===' ')name='SPACE';
+    if(keys.length<4&&!keys.includes(name))keys.push(name);
+    window.removeEventListener('keydown',f,true);
+    btn.classList.remove('rec');
+    onSave(keys);
+  };
+  window.addEventListener('keydown',f,true);
+}
+
+// ---------- pin / esc ----------
+let pinned=false;
+const pinBtn=document.getElementById('pinBtn'),winEl=document.getElementById('win');
+pinBtn.addEventListener('click',()=>{pinned=!pinned;
+  pinBtn.classList.toggle('pinned',pinned);pinBtn.setAttribute('aria-pressed',pinned);
+  winEl.classList.toggle('pinned',pinned);inv('set_pinned',{pinned});});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(document.querySelector('.dropdown.open')){document.querySelectorAll('.dropdown.open').forEach(x=>x.classList.remove('open'));return;}
+    if(document.querySelector('.help.open')){document.querySelectorAll('.help.open').forEach(x=>x.classList.remove('open'));return;}
+    inv('hide_flyout');
+  }
+});
+document.querySelector('.titlebar').addEventListener('mousedown',e=>{
+  if(pinned&&!e.target.closest('button')&&T)T.window.getCurrentWindow().startDragging();});
+
+// ---------- targets ----------
+const segAuto=document.getElementById('segAuto'),segManual=document.getElementById('segManual');
+segAuto.addEventListener('click',()=>inv('set_config',{key:'manual_mode',value:false}));
+segManual.addEventListener('click',()=>inv('set_config',{key:'manual_mode',value:true}));
+document.getElementById('rescanBtn').addEventListener('click',()=>inv('rescan'));
+document.getElementById('targetSearch').addEventListener('input',e=>{
+  targetFilter=e.target.value.trim().toLowerCase();
+  if(lastState)renderTargets(lastState);
+});
+
+function makeProfileDropdown(options,current,onPick){
+  const dd=document.createElement('div');dd.className='dropdown';
+  const btn=document.createElement('button');btn.className='dd-btn';btn.textContent=current;
+  const menu=document.createElement('div');menu.className='dd-menu';
+  options.forEach(o=>{
+    const it=ddItem(o,o===current);
+    it.addEventListener('click',e=>{e.stopPropagation();btn.textContent=o;dd.classList.remove('open');onPick(o);});
+    menu.appendChild(it);
+  });
+  btn.addEventListener('click',e=>{e.stopPropagation();dd.classList.toggle('open');});
+  dd.append(btn,menu);return dd;
+}
+function profileIntervalLabel(sec){
+  if(sec==null||sec===undefined)return 'Use global';
+  for(const[k,v]of Object.entries(KEYMAP_INTERVAL))if(v===sec)return k;
+  return sec+' sec';
+}
+function triStateLabel(val){return val===true?'On':val===false?'Off':'Use global';}
+function triStateValue(label){if(label==='On')return true;if(label==='Off')return false;return null;}
+function profileHoldWinLabel(sec){
+  if(sec==null||sec===undefined)return 'Use global';
+  for(const[k,v]of Object.entries(KEYMAP_HOLDWIN))if(v===sec)return k;
+  return sec+' sec';
+}
+function saveTargetProfile(w,actionLabel,intervalLabel,customSec,keySeq,monitorLabel,adaptiveLabel,holdLabel,holdWinLabel,sendFocusLabel,fallbackLabel,sensLabel){
+  const action=actionLabel==='Use global'?null:actionLabel;
+  let interval=null;
+  if(intervalLabel&&intervalLabel!=='Use global'){
+    if(intervalLabel==='Custom…')interval=customSec;
+    else interval=KEYMAP_INTERVAL[intervalLabel]??null;
+  }
+  let monitor=null;
+  if(monitorLabel&&monitorLabel!=='Use global'){
+    monitor=monitorLabel==="Don't move"?monitorLabel:monitorLabelToDevice(monitorLabel);
+  }
+  let adaptive=null;
+  if(adaptiveLabel==='On')adaptive=true;
+  else if(adaptiveLabel==='Off')adaptive=false;
+  let holdWindow=null;
+  if(holdWinLabel&&holdWinLabel!=='Use global')holdWindow=KEYMAP_HOLDWIN[holdWinLabel]??null;
+  // Preserve the stored detection override when a caller doesn't touch it.
+  let sensitivity=sensLabel===undefined?(w.profile?.sensitivity??null):(sensLabel==='Use global'?null:sensLabel);
+  inv('set_target_profile',{
+    exe:w.exe,wclass:w.wclass,action,interval,key_sequence:keySeq??null,monitor,adaptive,
+    hold_while_playing:triStateValue(holdLabel),
+    hold_window_secs:holdWindow,
+    send_without_focus:triStateValue(sendFocusLabel),
+    auto_fallback:triStateValue(fallbackLabel),
+    sensitivity,
+  }).then(st=>st&&apply(st));
+}
+// Actions a community profile form accepts (the concrete sends, not Use global/Key sequence/Per-target).
+const SHAREABLE_ACTIONS=PROFILE_ACTIONS.filter(a=>!['Use global','Gamepad nudge','Key sequence…'].includes(a));
+function shareProfileFields(st,w){
+  const p=w.profile||{};
+  let action=p.action;
+  if(!action||!SHAREABLE_ACTIONS.includes(action)){const g=st.config.action;action=SHAREABLE_ACTIONS.includes(g)?g:'';}
+  const secs=(p.interval!=null?p.interval:st.config.interval)||0;
+  const interval=secs?(secs%60===0?(secs/60+' min'):(secs+' sec')):'';
+  const bits=[];
+  if(w.success_rate!=null)bits.push('Success rate '+w.success_rate+'%'+(w.actions?(' over '+w.actions+' actions'):''));
+  if(w.learned&&w.learned.active&&w.learned.top&&w.learned.top.length)
+    bits.push('Learned keys: '+w.learned.top.map(t=>t.key.toLowerCase()).join(', '));
+  if(w.monitor&&w.monitor.target)bits.push('Monitor: '+w.monitor.target+(w.monitor.status?(' ('+w.monitor.status+')'):''));
+  const ff=[];const f=w.facts||{};
+  if(f.fullscreen)ff.push('fullscreen');if(f.borderless)ff.push('borderless');if(f.platform_path)ff.push('game folder');
+  if(ff.length)bits.push('Window: '+ff.join(', '));
+  return {exe:w.exe,game:w.title,action,interval,notes:bits.join('\n')};
+}
+function factChips(w){
+  const f=w.facts||{};
+  const defs=[['fullscreen',f.fullscreen],['borderless',f.borderless],['gfx dll',f.gfx_dll],
+              ['game folder',f.platform_path],['known game',f.known_game],['gpu active',f.gpu_active],
+              ['audio active',f.audio_active],['negative class',f.negative_class],['elevated',f.elevated===true]];
+  const host=document.createElement('div');host.className='factchips';
+  defs.forEach(([label,hit])=>{
+    const c=document.createElement('span');c.className='factchip'+(hit?' hit':'');c.textContent=label;
+    host.appendChild(c);
+  });
+  const score=document.createElement('span');score.className='factchip'+(w.score>=w.threshold?' hit':'');
+  score.textContent='score '+w.score+' / '+w.threshold;
+  host.appendChild(score);
+  return host;
+}
+function explainCard(data){
+  const card=document.createElement('div');card.className='explaincard';
+  const reason=document.createElement('div');reason.className='explainreason';
+  reason.textContent=data.reason;
+  card.appendChild(reason);
+  const chips=document.createElement('div');chips.className='factchips';
+  (data.factors||[]).forEach(f=>{
+    const c=document.createElement('span');c.className='factchip'+(f.applied?' hit':'');
+    c.textContent=f.label+' '+(f.points>0?'+':'')+f.points;
+    chips.appendChild(c);
+  });
+  const sc=document.createElement('span');sc.className='factchip'+(data.score>=data.threshold?' hit':'');
+  sc.textContent='score '+data.score+' / '+data.threshold;
+  chips.appendChild(sc);
+  card.appendChild(chips);
+  const foot=document.createElement('div');foot.className='prowdiag';
+  foot.textContent=data.sensitivity+' sensitivity · score alone: '+verdictLabel(data.score_verdict)+' · in effect: '+verdictLabel(data.effective);
+  card.appendChild(foot);
+  return card;
+}
+function detectionReasons(w){
+  const f=w.facts||{},reasons=[];
+  if(f.known_game)reasons.push('known game process');
+  if(f.platform_path)reasons.push('game folder');
+  if(f.fullscreen)reasons.push('fullscreen window');
+  if(f.borderless)reasons.push('borderless window');
+  if(f.gfx_dll)reasons.push('graphics runtime');
+  if(f.gpu_active)reasons.push('GPU activity');
+  if(f.audio_active)reasons.push('audio activity');
+  if(!reasons.length)reasons.push(w.overridden?'pinned by you':'score '+w.score+' / '+w.threshold);
+  return reasons;
+}
+function adaptiveEnabled(st,w){
+  const p=w.profile||{};
+  if(p.adaptive===false)return false;
+  if(p.adaptive===true)return true;
+  return !!st.config.adaptive_actions;
+}
+function adaptiveLabel(st,w){
+  if(!adaptiveEnabled(st,w))return 'Adaptive: off';
+  const learned=w.learned;
+  if(!learned||learned.samples<=0)return 'Adaptive: learning 0/'+(learned?.needed||50);
+  if(learned.active){
+    const top=(learned.top&&learned.top[0])?(' - '+learned.top[0].key.toLowerCase()):'';
+    return 'Adaptive: ready'+top+' ('+learned.samples+' samples)';
+  }
+  return 'Adaptive: learning '+Math.min(learned.samples,learned.needed)+'/'+learned.needed;
+}
+function monitorStatusLabel(w){
+  if(!w.monitor||!w.monitor.target)return null;
+  return 'Monitor: '+w.monitor.target+' — '+(w.monitor.status||'waiting');
+}
+function targetSummary(st,w,holdingTarget){
+  if(w.paused)return 'Paused — resume from details below';
+  if(w.gone)return 'Window closed — lingers briefly then drops off';
+  if(holdingTarget)return st.paused_reason?('Holding: '+st.paused_reason):'Holding — recent input';
+  if(w.elevated_mismatch)return 'Approve UAC if prompted — game runs as administrator';
+  if(w.health_warning)return w.health_warning;
+  if(w.effective==='game'&&!w.paused){
+    const parts=[];
+    if(w.next_tick!=null)parts.push('Next tick in '+fmt(w.next_tick));
+    if(w.last_action_secs!=null)parts.push('Last action '+fmt(w.last_action_secs)+' ago '+(w.last_action_ok===false?'✗':'✓'));
+    else if(w.next_tick!=null)parts.push('No actions yet');
+    if(parts.length)return parts.join(' · ');
+  }
+  return adaptiveLabel(st,w);
+}
+function targetDiagnostics(st,w){
+  const bits=[];
+  bits.push('Detected: '+detectionReasons(w).join(', '));
+  const monitorLine=monitorStatusLabel(w);
+  if(monitorLine)bits.push(monitorLine);
+  if(w.success_rate!=null)bits.push('Success '+w.success_rate+'%');
+  if(w.community?.label)bits.push(w.community.label);
+  if(w.community?.degraded)bits.push('Community: '+w.community.degraded);
+  if(w.primary_keepalive===false&&w.effective==='game')bits.push('Keepalives on another window for this exe');
+  return bits;
+}
+function pct(v){
+  return v==null?null:Math.round(Number(v)*100)+'%';
+}
+function communityProfileCard(st,w){
+  const c=w.community;if(!c)return null;
+  const card=document.createElement('div');card.className='communitycard';
+  const head=document.createElement('div');head.className='communityhead';
+  const title=document.createElement('div');title.className='communitytitle';
+  title.textContent=(c.name||'Community profile')+(c.action?' · '+c.action:'');
+  const status=document.createElement('div');status.className='communitystatus';
+  status.textContent=c.applied?'applied':(c.status||'available');
+  head.append(title,status);card.appendChild(head);
+
+  const reason=document.createElement('p');reason.className='communitytext';
+  const bits=[];
+  if(c.reason)bits.push(c.reason);
+  if(c.interval)bits.push('Recommended interval '+fmt(c.interval)+'.');
+  if(c.top_keys&&c.top_keys.length)bits.push('Seen keys: '+c.top_keys.slice(0,3).join(', ')+'.');
+  reason.textContent=bits.join(' ')||'Shared profile available for this executable.';
+  card.appendChild(reason);
+
+  const chips=document.createElement('div');chips.className='factchips';
+  [['detect',pct(c.detection_confidence)],['action',pct(c.action_confidence)],['monitor',pct(c.monitor_confidence)],['overall',pct(c.confidence)]]
+    .forEach(([label,value])=>{if(!value)return;const chip=document.createElement('span');chip.className='factchip hit';chip.textContent=label+' '+value;chips.appendChild(chip);});
+  if(chips.childNodes.length)card.appendChild(chips);
+
+  const meta=document.createElement('div');meta.className='communitymeta';
+  const metaBits=[];
+  if(c.verified)metaBits.push('VERIFIED '+c.verified);
+  if(c.reports!=null)metaBits.push(c.reports+' REPORTS');
+  if(c.variants&&c.variants.length)metaBits.push('VARIANTS '+c.variants.join(' / '));
+  if(c.monitor_note)metaBits.push(c.monitor_note);
+  if(c.limitations&&c.limitations.length)metaBits.push(c.limitations[0]);
+  meta.textContent=metaBits.join(' · ');
+  if(meta.textContent)card.appendChild(meta);
+
+  const actions=document.createElement('div');actions.className='communityactions';
+  if(!c.applied){
+    const applyBtn=document.createElement('button');applyBtn.className='btn2';applyBtn.textContent='Apply';
+    applyBtn.addEventListener('click',e=>{e.stopPropagation();applyBtn.disabled=true;
+      inv('apply_community_profile',{exe:w.exe,wclass:w.wclass}).then(st2=>st2&&apply(st2))
+        .catch(err=>showError(String(err))).finally(()=>{applyBtn.disabled=false;});});
+    actions.appendChild(applyBtn);
+  }
+  const settings=document.createElement('button');settings.className='btn2';settings.textContent='Use my settings instead';
+  settings.addEventListener('click',e=>{e.stopPropagation();
+    inv('dismiss_community_profile',{exe:w.exe}).then(st2=>st2&&apply(st2)).catch(err=>showError(String(err)));});
+  const dismiss=document.createElement('button');dismiss.className='btn2';dismiss.textContent='Dismiss';
+  dismiss.addEventListener('click',e=>{e.stopPropagation();
+    inv('dismiss_community_profile',{exe:w.exe}).then(st2=>st2&&apply(st2)).catch(err=>showError(String(err)));});
+  actions.append(settings,dismiss);
+  [['worked','Worked'],['wrong_game','Wrong game'],['wrong_action','Wrong action']].forEach(([key,label])=>{
+    const b=document.createElement('button');b.className='btn2';b.textContent=label;
+    b.addEventListener('click',e=>{e.stopPropagation();b.disabled=true;
+      inv('community_feedback',{exe:w.exe,feedback:key}).then(st2=>{if(st2)apply(st2);showFlyoutToast({kind:'success',text:'Saved feedback',duration_ms:1800});})
+        .catch(err=>showError(String(err))).finally(()=>{b.disabled=false;});});
+    actions.appendChild(b);
+  });
+  card.appendChild(actions);
+  return card;
+}
+function verdictLabel(value){
+  return value==='game'?'MARKED':String(value||'').toUpperCase();
+}
+function toggleFavorite(st,w){
+  const id=w.exe+'\u{1f}'+w.wclass;
+  const cur=st.config.favorite_targets||[];
+  // Newly-starred floats above earlier stars (most-recent first).
+  const next=cur.includes(id)?cur.filter(x=>x!==id):[id,...cur];
+  inv('set_config',{key:'favorite_targets',value:next}).then(s=>s&&apply(s)).catch(err=>showError(String(err)));
+}
+function targetRow(st,w,offline){
+  const id=w.exe+'\u{1f}'+w.wclass;
+  const wrap=document.createElement('div');wrap.className='trowwrap'+(openProfileId===id?' open':'');
+  const row=document.createElement('div');
+  row.className='trow'+(w.gone?' gone':'')+(w.paused?' paused':'');
+  row.tabIndex=0;
+  row.setAttribute('role','button');
+  const toggleOpen=()=>{
+    if(openProfileId===id){openProfileId=null;explainOpenId=null;explainCache={};}
+    else openProfileId=id;
+    renderTargets(st);
+  };
+  row.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleOpen();}
+  });
+  const pill=document.createElement('button');
+  pill.className='pill '+(w.effective==='game'?'game':'')+(!w.overridden?' auto':'');
+  const adot=document.createElement('span');adot.className='adot2';
+  pill.append(adot,document.createTextNode(verdictLabel(w.effective)));
+  pill.title=!w.overridden?'Mark: automatic — click to overrule':'Pinned by you — click to cycle';
+  pill.addEventListener('click',e=>{e.stopPropagation();inv('cycle_override',{exe:w.exe,wclass:w.wclass});});
+  row.appendChild(pill);
+  const letter=(w.exe[0]||'?').toUpperCase();
+  row.insertAdjacentHTML('beforeend','<span class="pic">'+letter+'</span><span class="ttitle"></span><span class="tmeta"></span><span class="texe"></span>');
+  row.querySelector('.ttitle').textContent=w.title+(w.paused?' (paused)':'');
+  row.querySelector('.texe').textContent=w.exe;
+  const meta=row.querySelector('.tmeta');
+  const holdingTarget=st.engine==='holding'&&w.effective==='game'&&!w.gone&&!w.paused;
+  if(holdingTarget)meta.textContent='HOLDING';
+  else if(!offline&&!w.gone&&w.effective==='game'&&!w.paused&&w.next_tick!=null)meta.textContent='⏱ '+fmt(w.next_tick);
+  if(w.elevated_mismatch)meta.textContent='⚠ admin';
+  else if(w.community?.applied)meta.textContent='crowd';
+  else if(w.community?.label)meta.textContent='crowd?';
+  else if(w.health_warning)meta.textContent='⚠ failing';
+  else if(w.primary_keepalive===false&&w.effective==='game'&&!w.gone)meta.textContent='alt window';
+  if(!offline){
+    const isFav=(st.config.favorite_targets||[]).includes(w.exe+'\u{1f}'+w.wclass);
+    const star=document.createElement('button');
+    star.className='starbtn'+(isFav?' on':'');
+    star.title=isFav?'Starred — kept at top. Click to unstar.':'Star to keep this game at the top of Sightline';
+    star.setAttribute('aria-pressed',isFav?'true':'false');
+    star.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="'+(isFav?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.6"><path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5L12 18.9 6.2 21.6l1.1-6.5L2.6 9.5l6.5-.9z"/></svg>';
+    star.addEventListener('click',e=>{e.stopPropagation();toggleFavorite(st,w);});
+    row.appendChild(star);
+  }
+  const prof=document.createElement('button');prof.className='profbtn';prof.textContent='details';
+  prof.addEventListener('click',e=>{e.stopPropagation();toggleOpen();});
+  row.appendChild(prof);
+  wrap.appendChild(row);
+
+  const prow=document.createElement('div');prow.className='prow';
+  if(openProfileId===id){
+    if(!offline){
+      const summary=document.createElement('div');summary.className='prowsummary';
+      summary.textContent=targetSummary(st,w,holdingTarget);
+      prow.appendChild(summary);
+      const diagBits=targetDiagnostics(st,w);
+      if(diagBits.length){
+        const diag=document.createElement('div');diag.className='prowdiag';
+        diag.textContent=diagBits.join(' · ');
+        prow.appendChild(diag);
+      }
+      const communityCard=communityProfileCard(st,w);
+      if(communityCard)prow.appendChild(communityCard);
+      prow.appendChild(factChips(w));
+      if(adaptiveEnabled(st,w)&&w.effective==='game'){
+        const lchips=document.createElement('div');lchips.className='factchips';
+        const samples=w.learned?.samples||0,needed=w.learned?.needed||50;
+        const tag=document.createElement('span');tag.className='factchip'+(w.learned?.active?' hit':'');
+        tag.textContent=w.learned?.active?'adaptive ready':'learning '+Math.min(samples,needed)+'/'+needed;
+        tag.title=w.learned?.active?'Keepalives for this game now mimic your own inputs'
+          :'Play with this window focused — adaptive keepalives switch on at '+needed+' samples';
+        lchips.appendChild(tag);
+        (w.learned?.top||[]).forEach(t=>{
+          const c=document.createElement('span');c.className='factchip';
+          c.textContent=t.key.toLowerCase()+' '+t.pct+'%';lchips.appendChild(c);});
+        prow.appendChild(lchips);
+      }
+      const actions=document.createElement('div');actions.className='prowactions';
+      const sendBtn=document.createElement('button');sendBtn.className='btn2';sendBtn.textContent='Send now';
+      sendBtn.addEventListener('click',e=>{e.stopPropagation();sendBtn.disabled=true;
+        inv('test_target',{exe:w.exe,wclass:w.wclass})
+          .then(st2=>{if(st2)apply(st2);})
+          .catch(err=>showError(String(err)))
+          .finally(()=>{sendBtn.disabled=false;});});
+      const pauseBtn=document.createElement('button');pauseBtn.className='btn2';
+      pauseBtn.textContent=w.paused?'Resume':'Pause';
+      pauseBtn.addEventListener('click',e=>{e.stopPropagation();
+        inv('pause_target',{exe:w.exe,wclass:w.wclass,paused:!w.paused}).then(st2=>st2&&apply(st2))
+          .catch(err=>showError(String(err)));});
+      const statsBtn=document.createElement('button');statsBtn.className='btn2';statsBtn.textContent='Stats';
+      statsBtn.addEventListener('click',e=>{e.stopPropagation();activatePane('stats');});
+      const whyBtn=document.createElement('button');whyBtn.className='btn2';whyBtn.textContent='Why?';
+      whyBtn.title='Explain why this window is or isn’t kept awake';
+      if(explainOpenId===id)whyBtn.classList.add('on');
+      whyBtn.addEventListener('click',e=>{e.stopPropagation();
+        if(explainOpenId===id){explainOpenId=null;delete explainCache[id];renderTargets(st);return;}
+        explainOpenId=id;whyBtn.disabled=true;
+        inv('explain_detection',{exe:w.exe,wclass:w.wclass})
+          .then(data=>{if(data){explainCache[id]=data;renderTargets(st);}})
+          .catch(err=>{explainOpenId=null;showError(String(err));})
+          .finally(()=>{whyBtn.disabled=false;});});
+      actions.append(sendBtn,pauseBtn,statsBtn,whyBtn);
+      if(st.config.monitor_placement&&w.monitor&&w.monitor.target){
+        const moveBtn=document.createElement('button');moveBtn.className='btn2';moveBtn.textContent='Move now';
+        moveBtn.addEventListener('click',e=>{e.stopPropagation();moveBtn.disabled=true;
+          inv('move_target',{exe:w.exe,wclass:w.wclass})
+            .then(st2=>{if(st2)apply(st2);})
+            .catch(err=>showError(String(err)))
+            .finally(()=>{moveBtn.disabled=false;});});
+        actions.append(moveBtn);
+      }
+      if(w.learned&&w.learned.samples>0){
+        const forgetBtn=document.createElement('button');forgetBtn.className='btn2';forgetBtn.textContent='Reset learning';
+        forgetBtn.addEventListener('click',e=>{e.stopPropagation();
+          inv('reset_learning',{exe:w.exe,wclass:w.wclass}).then(st2=>st2&&apply(st2))
+            .catch(err=>showError(String(err)));});
+        actions.append(forgetBtn);
+      }
+      if(!w.gone){
+        const shareBtn=document.createElement('button');shareBtn.className='btn2';shareBtn.textContent='Share profile';
+        shareBtn.title='Open a prefilled GitHub issue to contribute what worked for this game';
+        shareBtn.addEventListener('click',e=>{e.stopPropagation();
+          inv('share_community_profile',shareProfileFields(st,w))
+            .then(()=>showFlyoutToast({kind:'success',text:'Opened a prefilled profile issue',duration_ms:2200}))
+            .catch(err=>showError(String(err)));});
+        actions.append(shareBtn);
+      }
+      prow.appendChild(actions);
+      if(explainOpenId===id&&explainCache[id])prow.appendChild(explainCard(explainCache[id]));
+    }
+    const p=w.profile||{};
+    const actionLabel=p.action||'Use global';
+    const intLabel=profileIntervalLabel(p.interval);
+    const monitorLabel=profileMonitorLabel(p,st.config.monitor_placement);
+    const adaptiveProfileLabel=p.adaptive===true?'On':p.adaptive===false?'Off':'Use global';
+    const holdProfileLabel=triStateLabel(p.hold_while_playing);
+    const holdWinProfileLabel=profileHoldWinLabel(p.hold_window_secs);
+    const sendFocusProfileLabel=triStateLabel(p.send_without_focus);
+    const fallbackProfileLabel=triStateLabel(p.auto_fallback);
+    const arow=document.createElement('div');arow.className='prowrow';
+    arow.innerHTML='<span class="plabel">Action</span>';
+    arow.appendChild(makeProfileDropdown(PROFILE_ACTIONS,actionLabel,l=>saveTargetProfile(w,l,profileIntervalLabel(p.interval),p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel)));
+    prow.appendChild(arow);
+    const irow=document.createElement('div');irow.className='prowrow';
+    irow.innerHTML='<span class="plabel">Interval</span>';
+    irow.appendChild(makeProfileDropdown(PROFILE_INTERVALS,intLabel,l=>{
+      if(l==='Custom…'){const v=prompt('Interval in seconds (10–3600):',String(p.interval||60));
+        if(v)saveTargetProfile(w,actionLabel,'Custom…',Math.max(10,Math.min(3600,Number(v)||60)),p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel);}
+      else saveTargetProfile(w,actionLabel,l,null,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel);
+    }));
+    prow.appendChild(irow);
+    const mrow=document.createElement('div');mrow.className='prowrow';
+    mrow.innerHTML='<span class="plabel">Monitor</span>';
+    mrow.appendChild(makeProfileDropdown(monitorProfileOptions(),monitorLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,l,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel)));
+    prow.appendChild(mrow);
+    const adrow=document.createElement('div');adrow.className='prowrow';
+    adrow.innerHTML='<span class="plabel">Adaptive</span>';
+    adrow.appendChild(makeProfileDropdown(['Use global','On','Off'],adaptiveProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,l,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel)));
+    prow.appendChild(adrow);
+    const hrow=document.createElement('div');hrow.className='prowrow';
+    hrow.innerHTML='<span class="plabel">Hold while playing</span>';
+    hrow.appendChild(makeProfileDropdown(PROFILE_BEHAVIOR,holdProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,l,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel)));
+    prow.appendChild(hrow);
+    const hwrow=document.createElement('div');hwrow.className='prowrow';
+    hwrow.innerHTML='<span class="plabel">Hold window</span>';
+    hwrow.appendChild(makeProfileDropdown(PROFILE_HOLDWIN,holdWinProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,l,sendFocusProfileLabel,fallbackProfileLabel)));
+    prow.appendChild(hwrow);
+    const sfrow=document.createElement('div');sfrow.className='prowrow';
+    sfrow.innerHTML='<span class="plabel">Background-only</span>';
+    sfrow.appendChild(makeProfileDropdown(PROFILE_BEHAVIOR,sendFocusProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,l,fallbackProfileLabel)));
+    prow.appendChild(sfrow);
+    const fbrow=document.createElement('div');fbrow.className='prowrow';
+    fbrow.innerHTML='<span class="plabel">Auto-fallback</span>';
+    fbrow.appendChild(makeProfileDropdown(PROFILE_BEHAVIOR,fallbackProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,l)));
+    prow.appendChild(fbrow);
+    const senrow=document.createElement('div');senrow.className='prowrow';
+    senrow.innerHTML='<span class="plabel">Detection</span>';
+    const sensProfileLabel=p.sensitivity||'Use global';
+    senrow.appendChild(makeProfileDropdown(['Use global','Strict','Standard','Broad'],sensProfileLabel,l=>saveTargetProfile(w,actionLabel,intLabel,p.interval,p.key_sequence,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel,l)));
+    prow.appendChild(senrow);
+    if(actionLabel==='Key sequence…'||p.action==='Key sequence…'){
+      const krow=document.createElement('div');krow.className='prowrow';
+      krow.innerHTML='<span class="plabel">Keys</span>';
+      const khost=document.createElement('div');khost.className='keyseq';
+      renderKeySeqUI(khost,p.key_sequence||[],keys=>saveTargetProfile(w,'Key sequence…',intLabel,p.interval,keys,monitorLabel,adaptiveProfileLabel,holdProfileLabel,holdWinProfileLabel,sendFocusProfileLabel,fallbackProfileLabel));
+      krow.appendChild(khost);prow.appendChild(krow);
+    }
+  }
+  wrap.appendChild(prow);
+  return wrap;
+}
+let lastFiltered=[];
+function renderTargets(st){
+  segAuto.classList.toggle('active',!st.config.manual_mode);
+  segManual.classList.toggle('active',!!st.config.manual_mode);
+  const list=document.getElementById('targetlist');list.innerHTML='';
+  const visible=st.games.filter(w=>targetVisible(w,st.config));
+  let filtered=visible.filter(w=>{
+    if(!targetFilter)return true;
+    const hay=(w.title+' '+w.exe).toLowerCase();
+    return hay.includes(targetFilter);
+  });
+  if(st.config.target_sort==='Name'){
+    filtered=[...filtered].sort((a,b)=>(a.gone-b.gone)||a.title.localeCompare(b.title,undefined,{sensitivity:'base'}));
+  }
+  // Starred games float to the top (in starred order), but gone ones still sink.
+  const favs=st.config.favorite_targets||[];
+  if(favs.length){
+    const favIdx=w=>{const i=favs.indexOf(w.exe+'\u{1f}'+w.wclass);return i<0?Infinity:i;};
+    filtered=[...filtered].sort((a,b)=>{
+      if(!!a.gone!==!!b.gone)return (a.gone?1:0)-(b.gone?1:0);
+      const fa=favIdx(a),fb=favIdx(b);
+      return fa===fb?0:fa-fb;
+    });
+  }
+  lastFiltered=filtered;
+
+  // Pre-armed targets that aren't currently running (manual mode pre-arm).
+  const running=new Set(st.games.map(w=>(w.exe+'\u{1f}'+w.wclass).toLowerCase()));
+  const offline=(st.config.armed_overrides||[])
+    .filter(o=>!running.has((o.exe+'\u{1f}'+o.wclass).toLowerCase()))
+    .filter(o=>!targetFilter||(o.exe.toLowerCase().includes(targetFilter)))
+    .map(o=>({title:o.exe.replace(/\.exe$/i,'')+' — not running',exe:o.exe,wclass:o.wclass,
+              verdict:'ignored',effective:'game',overridden:true,gone:true,paused:false,uptime:0,actions:0,
+              score:0,threshold:0,facts:{},next_tick:null,last_action_secs:null,last_action_ok:null,
+              elevated_mismatch:false,learned:null,monitor:{target:null,status:null},profile:{}}));
+
+  document.getElementById('empty').classList.toggle('show',filtered.length===0&&offline.length===0);
+  document.getElementById('emptyText').textContent=
+    targetFilter?'No targets match “'+targetFilter+'”.'
+    :st.config.manual_mode?'Manual mode: launch a game, then mark it here to keep it alive.'
+    :'Nothing marked. OMNAFK is watching.';
+  const armed=st.games.filter(w=>w.effective==='game'&&!w.gone&&!w.paused).length;
+  const targetsTab=tabs.find(x=>x.dataset.pane==='targets');
+  targetsTab.classList.toggle('hasbadge',armed>0);
+  document.getElementById('targetsBadge').textContent=armed||'';
+
+  let goneDividerAdded=false;
+  filtered.forEach(w=>{
+    if(w.gone&&!goneDividerAdded){
+      goneDividerAdded=true;
+      const div=document.createElement('div');div.className='tdivider';div.textContent='RECENTLY CLOSED';
+      list.appendChild(div);
+    }
+    list.appendChild(targetRow(st,w,false));
+  });
+  if(offline.length){
+    const div=document.createElement('div');div.className='tdivider';div.textContent='PRE-ARMED (NOT RUNNING)';
+    list.appendChild(div);
+    offline.forEach(w=>list.appendChild(targetRow(st,w,true)));
+  }
+
+  const g=st.games.filter(w=>w.effective==='game'&&!w.gone).length,
+        ig=st.games.filter(w=>w.effective==='ignored'&&!w.gone).length,
+        paused=st.games.filter(w=>w.effective==='game'&&!w.gone&&w.paused).length,
+        hidden=st.games.filter(w=>!targetVisible(w,st.config)&&!w.gone).length;
+  document.getElementById('armednote').textContent=
+    st.config.manual_mode?('MANUAL — '+g+' MARKED'+(paused?', '+paused+' PAUSED':''))
+                         :('WATCHING — '+g+' MARKED, '+ig+' IGNORED'
+                           +(paused?', '+paused+' PAUSED':'')+(hidden?', '+hidden+' HIDDEN':''));
+}
+const testAllBtn=document.getElementById('testAllBtn');
+testAllBtn.addEventListener('click',()=>{
+  testAllBtn.disabled=true;
+  inv('test_all_targets')
+    .then(r=>{
+      if(!r||!r.tested)showFlyoutToast({kind:'info',text:'No active targets to test',duration_ms:2200});
+      else if(r.failed)showFlyoutToast({kind:'error',text:`Tested ${r.tested}: ${r.ok} ok, ${r.failed} failed`,duration_ms:4000});
+      else showFlyoutToast({kind:'success',text:`Tested ${r.tested}: all ok`,duration_ms:2600});
+    })
+    .catch(err=>showError(String(err)))
+    .finally(()=>{testAllBtn.disabled=false;});
+});
+document.getElementById('ignoreAllBtn').addEventListener('click',()=>{
+  const rows=lastFiltered.filter(w=>!w.gone);
+  if(!rows.length)return;
+  Promise.all(rows.map(w=>inv('set_override',{exe:w.exe,wclass:w.wclass,verdict:'ignored'}).catch(()=>null)))
+    .then(results=>{const st=results.filter(Boolean).pop();st&&apply(st);});
+});
+const clearOvBtn=document.getElementById('clearOverridesBtn');let covT=null;
+clearOvBtn.addEventListener('click',()=>{
+  if(clearOvBtn.dataset.c){
+    delete clearOvBtn.dataset.c;clearOvBtn.textContent='Reset overrides';clearTimeout(covT);
+    inv('clear_overrides').then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+    return;
+  }
+  clearOvBtn.dataset.c='1';clearOvBtn.textContent='Click again to confirm';
+  covT=setTimeout(()=>{clearOvBtn.textContent='Reset overrides';delete clearOvBtn.dataset.c;},3000);
+});
+function targetVisible(w,c){
+  if(c.target_view==='All')return true;
+  if(c.target_view==='Games only')return w.effective==='game'||w.overridden;
+  if(w.effective==='game'||w.overridden)return true;
+  return !quietTarget(w);
+}
+function quietTarget(w){
+  const exe=String(w.exe||'').toLowerCase();
+  if(QUIET_TARGET_EXES.has(exe))return true;
+  return exe.endsWith('helper.exe')||exe.endsWith('updater.exe');
+}
+
+// ---------- status / stats ----------
+const stext=document.getElementById('stext'),statusTick=document.getElementById('statusTick'),
+      adot=document.getElementById('adot'),
+      pulse=document.getElementById('pulse'),suspendBtn=document.getElementById('suspendBtn'),
+      errbar=document.getElementById('errbar'),warnbar=document.getElementById('warnbar');
+function fmt(s){s=Math.max(0,s|0);const h=String(s/3600|0).padStart(2,'0'),
+  m=String(s%3600/60|0).padStart(2,'0'),x=String(s%60).padStart(2,'0');return h+':'+m+':'+x}
+function fmtShort(s){s=Math.max(0,s|0);if(s<60)return s+'s';if(s<3600)return (s/60|0)+'m';return (s/3600|0)+'h '+((s%3600)/60|0)+'m'}
+function setStatusLine(label,tick,armed){
+  stext.textContent=label;
+  stext.classList.toggle('armed',!!armed);
+  if(tick!=null&&tick!==''){
+    statusTick.textContent=tick;
+    statusTick.classList.add('show');
+    statusTick.setAttribute('aria-hidden','false');
+  }else{
+    statusTick.textContent='';
+    statusTick.classList.remove('show');
+    statusTick.setAttribute('aria-hidden','true');
+  }
+}
+function showError(msg){if(!msg)return;errbar.textContent=msg;errbar.classList.add('show');}
+
+const toastStack=document.getElementById('toastStack');
+const TOAST_ACTION_LABELS={open_flyout:'Open log',restart_admin:'Restart as admin'};
+const flyoutToasts=[];
+const MAX_FLYOUT_TOASTS=3;
+
+function dismissFlyoutToast(entry){
+  const idx=flyoutToasts.indexOf(entry);
+  if(idx>=0)flyoutToasts.splice(idx,1);
+  if(entry.timer)clearTimeout(entry.timer);
+  entry.el.remove();
+}
+
+function showFlyoutToast(payload){
+  if(!payload||!toastStack)return;
+  while(flyoutToasts.length>=MAX_FLYOUT_TOASTS){
+    dismissFlyoutToast(flyoutToasts[0]);
+  }
+  const el=document.createElement('div');
+  el.className='toast'+(payload.kind==='error'?' error':payload.kind==='success'?' success':'');
+  const brand=document.createElement('div');
+  brand.className='tbrand';
+  brand.textContent='OMNAFK';
+  const body=document.createElement('div');
+  body.className='tbody';
+  const text=document.createElement('div');
+  text.className='ttext';
+  text.textContent=payload.text||'';
+  body.appendChild(text);
+  const actions=document.createElement('div');
+  actions.className='tactions';
+  if(payload.action){
+    const btn=document.createElement('button');
+    btn.className='btn2';
+    btn.textContent=TOAST_ACTION_LABELS[payload.action]||'Open';
+    btn.addEventListener('click',()=>{
+      inv('toast_action',{action:payload.action}).catch(console.error);
+      dismissFlyoutToast(entry);
+    });
+    actions.appendChild(btn);
+  }
+  const close=document.createElement('button');
+  close.className='tclose';
+  close.setAttribute('aria-label','Dismiss');
+  close.textContent='×';
+  actions.appendChild(close);
+  el.append(brand,body,actions);
+  toastStack.appendChild(el);
+  const entry={el,timer:null};
+  close.addEventListener('click',()=>dismissFlyoutToast(entry));
+  const ms=Number(payload.duration_ms||0);
+  if(ms>0)entry.timer=setTimeout(()=>dismissFlyoutToast(entry),ms);
+  flyoutToasts.push(entry);
+}
+
+suspendBtn.addEventListener('click',()=>inv('set_suspended',{suspended:!suspendBtn.classList.contains('on')}));
+errbar.addEventListener('click',()=>activatePane('stats'));
+errbar.style.cursor='pointer';
+
+function renderStatus(st){
+  const e=st.engine;
+  suspendBtn.classList.toggle('on',e==='suspended');
+  suspendBtn.setAttribute('aria-pressed',e==='suspended');
+  suspendBtn.title=e==='suspended'?'Resume watching':'Suspend OMNAFK';
+  adot.classList.toggle('on',e==='active'||e==='holding');
+  adot.classList.toggle('hold',e==='holding');
+  adot.classList.toggle('off',e==='suspended');
+  if(st.error){errbar.textContent=st.error;errbar.classList.add('show');}
+  else errbar.classList.remove('show');
+
+  const elevated=st.games.filter(w=>w.effective==='game'&&!w.gone&&w.elevated_mismatch);
+  const healthWarn=st.games.find(w=>w.health_warning&&w.effective==='game'&&!w.gone);
+  const warnText=document.getElementById('warnText');
+  if(elevated.length&&warnText){
+    warnText.textContent=elevated[0].exe+' runs as administrator — approve the UAC prompt if OMNAFK asked to restart elevated.';
+    warnbar.classList.add('show');
+  }else if(healthWarn&&warnText){
+    warnText.textContent=healthWarn.health_warning;
+    warnbar.classList.add('show');
+  }else warnbar.classList.remove('show');
+
+  // Snooze dropdown reflects backend state.
+  const snoozeDD=document.querySelector('.dropdown[data-action="snooze"]');
+  if(snoozeDD&&snoozeDD._set){
+    snoozeDD._set(st.snooze_remaining!=null?fmtShort(st.snooze_remaining):'Off');
+  }
+
+  const games=st.games.filter(w=>w.effective==='game'&&!w.gone);
+  const name=games.length===1?games[0].title.toUpperCase():games.length+' MARKED';
+  if(st.error){
+    const msg=String(st.error).replace(/\s+/g,' ').slice(0,64);
+    setStatusLine('ERROR — '+msg,null,false);
+    return;
+  }
+  if(e==='suspended'){
+    setStatusLine(
+      st.snooze_remaining!=null?'SNOOZED — BACK IN':'SUSPENDED — NOT WATCHING',
+      st.snooze_remaining!=null?fmt(st.snooze_remaining):null,
+      false
+    );
+    return;
+  }
+  if(e==='dormant'){
+    setStatusLine('DORMANT — WATCHING',null,false);
+    return;
+  }
+  if(e==='holding'){
+    setStatusLine(
+      st.paused_reason?'HOLDING — '+st.paused_reason:'HOLDING — RECENT INPUT',
+      null,
+      true
+    );
+    return;
+  }
+  setStatusLine('AWAKE — '+name,fmt(st.next_tick??0),true);
+}
+
+document.getElementById('segSession').addEventListener('click',()=>{statsView='session';if(lastState)renderStats(lastState);});
+document.getElementById('segLifetime').addEventListener('click',()=>{statsView='lifetime';if(lastState)renderStats(lastState);});
+document.getElementById('exportStatsBtn').addEventListener('click',()=>inv('export_stats').catch(err=>showError(String(err))));
+
+function renderStats(st){
+  const s=st.stats,life=statsView==='lifetime';
+  document.getElementById('segSession').classList.toggle('active',!life);
+  document.getElementById('segLifetime').classList.toggle('active',life);
+  document.getElementById('lblKept').textContent=life?'Time kept alive (all time)':'Time kept alive';
+  document.getElementById('lblActions').textContent=life?'Actions sent (all time)':'Actions sent';
+  document.getElementById('statSession').textContent=fmt(life?(s.lifetime_kept??0):s.kept);
+  document.getElementById('statActions').textContent=life?(s.lifetime_actions??0):s.actions;
+  document.getElementById('statSeen').textContent=s.seen;
+  document.getElementById('statCurStreak').textContent=fmt(s.current_streak??0);
+  document.getElementById('statStreak').textContent=fmt(s.longest_streak??0);
+  document.getElementById('hdrUptime').textContent=life?'KEPT':'UPTIME';
+
+  const host=document.getElementById('statRows');host.innerHTML='';
+  const empty='<div class="sr"><span style="color:var(--text-faint)">'+(life?'No lifetime data yet.':'Waiting for the first armed game.')+'</span><span class="m"></span><span class="m"></span></div>';
+  if(life){
+    const games=s.lifetime_games||[];
+    if(!games.length)host.innerHTML=empty;
+    games.forEach(g=>{
+      const d=document.createElement('div');d.className='sr';
+      d.innerHTML='<span></span><span class="m"></span><span class="m"></span>';
+      d.children[0].textContent=g.title||g.identity;d.children[1].textContent=fmt(g.kept);d.children[2].textContent=g.actions;
+      host.appendChild(d);
+    });
+  }else{
+    const rows=st.games.filter(w=>w.effective==='game');
+    if(!rows.length)host.innerHTML=empty;
+    rows.forEach(w=>{
+      const d=document.createElement('div');d.className='sr';
+      d.innerHTML='<span></span><span class="m"></span><span class="m"></span>';
+      d.children[0].textContent=w.title;d.children[1].textContent=fmt(w.uptime);d.children[2].textContent=w.actions;
+      host.appendChild(d);
+    });
+  }
+
+  // Session actions by type.
+  const types=Object.entries(s.actions_by_type||{});
+  const typeRows=document.getElementById('typeRows');typeRows.innerHTML='';
+  document.getElementById('typeHdr').style.display=types.length?'':'none';
+  document.getElementById('typeTable').style.display=types.length?'':'none';
+  types.forEach(([label,count])=>{
+    const d=document.createElement('div');d.className='sr';
+    d.innerHTML='<span></span><span class="m"></span>';
+    d.children[0].textContent=label;d.children[1].textContent=count;
+    typeRows.appendChild(d);
+  });
+
+  // Daily history with relative bars.
+  const daily=(s.daily||[]).slice(0,7);
+  const maxKept=Math.max(1,...daily.map(d=>d.kept));
+  const dailyRows=document.getElementById('dailyRows');dailyRows.innerHTML='';
+  if(!daily.length)dailyRows.innerHTML='<div class="sr"><span style="color:var(--text-faint)">No history yet.</span><span class="m"></span><span class="m"></span></div>';
+  daily.forEach(d=>{
+    const r=document.createElement('div');r.className='sr';
+    r.innerHTML='<span></span><span class="daybar"><i></i></span><span class="m"></span><span class="m"></span>';
+    r.children[0].textContent=d.date.slice(5);
+    r.children[0].style.flex='none';r.children[0].style.width='44px';
+    r.children[1].querySelector('i').style.width=Math.round(100*d.kept/maxKept)+'%';
+    r.children[2].textContent=fmtShort(d.kept);r.children[3].textContent=d.actions;
+    dailyRows.appendChild(r);
+  });
+
+  // Activity log (newest first from backend).
+  const logHost=document.getElementById('logRows');logHost.innerHTML='';
+  const log=st.log||[];
+  if(!log.length)logHost.innerHTML='<div class="logrow"><span class="ltxt" style="color:var(--text-faint)">No activity yet.</span></div>';
+  log.slice(0,30).forEach(ev=>{
+    const d=document.createElement('div');d.className='logrow'+(ev.kind==='error'?' error':'');
+    d.innerHTML='<span class="lat"></span><span class="ltxt"></span>';
+    d.children[0].textContent=ev.at;d.children[1].textContent=ev.text;d.children[1].title=ev.text;
+    logHost.appendChild(d);
+  });
+}
+
+function renderVersion(version,c){
+  if(!version)return;
+  const label='v'+String(version).replace(/^v/i,'');
+  document.querySelectorAll('.ver,.aver').forEach(el=>{el.textContent=label;});
+  winEl.classList.toggle('version-title-hidden',c?.version_display==='About only'||c?.version_display==='Hidden');
+  winEl.classList.toggle('version-about-hidden',c?.version_display==='Hidden');
+}
+
+// ---------- config -> controls ----------
+function renderInterfacePreferences(c){
+  setClass(winEl,['theme-contrast'],c.theme==='High contrast'?'theme-contrast':'');
+  setClass(winEl,['tab-labels-always','tab-labels-icons'],
+    c.tab_label_mode==='Always'?'tab-labels-always':c.tab_label_mode==='Icons only'?'tab-labels-icons':'');
+  winEl.classList.toggle('targets-comfortable',c.target_density==='Comfortable');
+  setClass(winEl,['safety-compact','safety-hidden'],
+    c.safety_note_display==='Compact'?'safety-compact':c.safety_note_display==='Hidden'?'safety-hidden':'');
+}
+function renderConfig(c){
+  document.querySelectorAll('.toggle[data-key]').forEach(t=>{
+    const v=c[t.dataset.key];if(v===undefined)return;
+    t.classList.toggle('on',!!v);t.setAttribute('aria-checked',!!v);});
+  document.querySelectorAll('.dropdown[data-key]').forEach(d=>{
+    const v=c[d.dataset.key];if(v===undefined)return;
+    if(d.dataset.key!=='interval')d._set(labelFor(d.dataset.key,v));
+  });
+  syncCustomIntervalUI(c);syncActionUI(c);syncAdaptiveUI(c);syncMonitorUI(c);
+  const am=document.getElementById('alwaysMarkExes');
+  if(am&&document.activeElement!==am)am.value=(c.always_mark_exes||[]).join(', ');
+  const ai=document.getElementById('alwaysIgnoreExes');
+  if(ai&&document.activeElement!==ai)ai.value=(c.always_ignore_exes||[]).join(', ');
+  const mt=document.getElementById('markTitleContains');
+  if(mt&&document.activeElement!==mt)mt.value=(c.mark_title_contains||[]).join(', ');
+  const it=document.getElementById('ignoreTitleContains');
+  if(it&&document.activeElement!==it)it.value=(c.ignore_title_contains||[]).join(', ');
+  const hk=document.getElementById('hotkey');
+  if(c.hotkey&&!hk.classList.contains('rec'))hk.textContent=c.hotkey;
+  const shk=document.getElementById('suspendHotkey');
+  if(!shk.classList.contains('rec'))shk.textContent=c.suspend_hotkey||'NONE';
+  const repo=document.getElementById('githubRepo');
+  if(repo&&document.activeElement!==repo)repo.value=c.github_repo||'';
+  updateConnectedState(c.github_repo||'');
+  renderInterfacePreferences(c);
+  pinned=!!c.pinned;pinBtn.classList.toggle('pinned',pinned);winEl.classList.toggle('pinned',pinned);
+  // Jitter row only matters when randomize is on.
+  document.getElementById('jitterRow').classList.toggle('hidden',!c.randomize);
+  // Hold time only matters when hold-while-playing is on.
+  document.getElementById('holdWinRow').classList.toggle('hidden',!c.hold_while_playing);
+  // Quiet hours inputs.
+  document.getElementById('quietRow').classList.toggle('hidden',!c.quiet_hours_enabled);
+  document.getElementById('quietDaysRow').classList.toggle('hidden',!c.quiet_hours_enabled);
+  const qs=document.getElementById('quietStart'),qe=document.getElementById('quietEnd');
+  if(document.activeElement!==qs)qs.value=c.quiet_start||'23:00';
+  if(document.activeElement!==qe)qe.value=c.quiet_end||'07:00';
+  // Away alerts: show channel inputs only when enabled.
+  const alertsOn=!!c.remote_alerts;
+  document.getElementById('ntfyRow').classList.toggle('hidden',!alertsOn);
+  document.getElementById('discordRow').classList.toggle('hidden',!alertsOn);
+  document.getElementById('alertTestRow').classList.toggle('hidden',!alertsOn);
+  const ntfyEl=document.getElementById('ntfyTopic'),dwEl=document.getElementById('discordWebhook');
+  if(ntfyEl&&document.activeElement!==ntfyEl)ntfyEl.value=c.ntfy_topic||'';
+  if(dwEl&&document.activeElement!==dwEl)dwEl.value=c.discord_webhook||'';
+  // First-run tour.
+  if(!c.tour_done&&!tourActive){tourActive=true;showTour();}
+  const iHead=document.getElementById('interfaceCollapseHead');
+  const iBody=document.getElementById('interfaceCollapseBody');
+  const interfaceCollapsed=!!c.settings_interface_collapsed;
+  iHead.classList.toggle('open',!interfaceCollapsed);iBody.classList.toggle('open',!interfaceCollapsed);
+  const uHead=document.getElementById('updatesCollapseHead');
+  const uBody=document.getElementById('updatesCollapseBody');
+  const collapsed=!!c.settings_updates_collapsed;
+  uHead.classList.toggle('open',!collapsed);uBody.classList.toggle('open',!collapsed);
+  const gHead=document.getElementById('generalAdvancedHead');
+  const gBody=document.getElementById('generalAdvancedBody');
+  const gCollapsed=!!c.general_advanced_collapsed;
+  gHead.classList.toggle('open',!gCollapsed);gBody.classList.toggle('open',!gCollapsed);
+  if(c.last_tab&&tabs.some(x=>x.dataset.pane===c.last_tab))activatePane(c.last_tab,false);
+  else activatePane('targets',false);
+  renderAutostartStatus(c);
+  refreshUserPresetDropdown(c.user_presets||[]);
+}
+document.getElementById('savePresetBtn')?.addEventListener('click',()=>{
+  const name=prompt('Preset name:');
+  if(!name)return;
+  inv('save_user_preset',{name:name.trim()}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('deletePresetBtn')?.addEventListener('click',()=>{
+  const dd=document.getElementById('userPresetDd');
+  const name=dd?.querySelector('.dd-btn')?.textContent?.trim();
+  if(!name||name==='—'){showError('Choose a saved preset to delete.');return;}
+  inv('delete_user_preset',{name}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('quietStart').addEventListener('change',function(){
+  inv('set_config',{key:'quiet_start',value:this.value}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('quietEnd').addEventListener('change',function(){
+  inv('set_config',{key:'quiet_end',value:this.value}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('ntfyTopic').addEventListener('change',function(){
+  inv('set_config',{key:'ntfy_topic',value:this.value.trim()}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('discordWebhook').addEventListener('change',function(){
+  inv('set_config',{key:'discord_webhook',value:this.value.trim()}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('testAlertBtn').addEventListener('click',function(){
+  const btn=this;btn.disabled=true;
+  // Persist the current field values first so the test uses what's shown.
+  Promise.all([
+    inv('set_config',{key:'ntfy_topic',value:document.getElementById('ntfyTopic').value.trim()}),
+    inv('set_config',{key:'discord_webhook',value:document.getElementById('discordWebhook').value.trim()}),
+  ]).then(()=>inv('test_alert'))
+    .then(msg=>showFlyoutToast({kind:'success',text:String(msg||'Test alert sent.'),duration_ms:2600}))
+    .catch(err=>showError(String(err)))
+    .finally(()=>{btn.disabled=false;});
+});
+// ---------- first-run walkthrough ----------
+let tourActive=false,tourIndex=0;
+const TOUR_STEPS=[
+  {icon:'<circle cx="12" cy="12" r="8"/><line x1="12" y1="1" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="23"/><line x1="1" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="23" y2="12"/>',
+   title:'Welcome to OMNAFK',
+   body:'OMNAFK keeps your games <b>awake while you’re away</b> — it sends a tiny input every so often, and backs off the moment you touch the game. It lives in your tray and runs on its own.'},
+  {icon:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/>',
+   title:'Sightline finds your games',
+   body:'The <b>Sightline</b> tab auto-detects running games. <b>MARKED</b> = kept awake, <b>IGNORED</b> = left alone. Click the pill to overrule a call, or open a game and hit <b>Why?</b> to see how it decided.'},
+  {icon:'<path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/>',
+   title:'Tune the keepalive',
+   body:'In <b>Keepalive</b>, choose the input (W tap, Space, camera nudge…) and how often it fires. <b>Hold while playing</b> means OMNAFK never fights you for the controls.'},
+  {icon:'<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+   title:'Stay in control',
+   body:'<b>Snooze</b> or set <b>quiet hours</b> whenever. Turn on <b>away alerts</b> for a phone notification if it stops while you’re gone. The tray <b>eyes</b> show status at a glance — open this window only when you want to change something.'},
+  {icon:'<path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4z"/>',
+   title:'One heads-up',
+   body:'Sending synthetic input can violate some games’ terms — especially titles with anti-cheat. Use OMNAFK at your discretion. That’s it — you’re ready to go!'},
+];
+function renderTour(){
+  const s=TOUR_STEPS[tourIndex],last=tourIndex===TOUR_STEPS.length-1;
+  document.getElementById('tourIc').innerHTML=s.icon;
+  document.getElementById('tourTitle').textContent=s.title;
+  document.getElementById('tourBody').innerHTML=s.body;
+  document.getElementById('tourBack').style.display=tourIndex>0?'inline-flex':'none';
+  document.getElementById('tourNext').textContent=last?'Get started':'Next';
+  const dots=document.getElementById('tourDots');dots.innerHTML='';
+  TOUR_STEPS.forEach((_,i)=>{const d=document.createElement('span');d.className='tour-dot'+(i===tourIndex?' on':'');dots.appendChild(d);});
+}
+function showTour(){tourIndex=0;renderTour();document.getElementById('tourOverlay').classList.add('show');}
+function finishTour(){
+  document.getElementById('tourOverlay').classList.remove('show');
+  inv('set_config',{key:'tour_done',value:true});
+}
+document.getElementById('tourNext').addEventListener('click',()=>{
+  if(tourIndex===TOUR_STEPS.length-1){finishTour();return;}
+  tourIndex++;renderTour();
+});
+document.getElementById('tourBack').addEventListener('click',()=>{if(tourIndex>0){tourIndex--;renderTour();}});
+document.getElementById('tourSkip').addEventListener('click',finishTour);
+document.getElementById('aboutTourBtn').addEventListener('click',()=>{tourActive=true;showTour();});
+
+// ---------- github updates ----------
+let updateUrl=null,promptUpdate=null;
+const githubRepo=document.getElementById('githubRepo');
+const updateStatus=document.getElementById('updateStatus');
+const checkUpdateBtn=document.getElementById('checkUpdateBtn');
+const openLatestBtn=document.getElementById('openLatestBtn');
+const openReleasesBtn=document.getElementById('openReleasesBtn');
+const openRepoBtn=document.getElementById('openRepoBtn');
+const updatePrompt=document.getElementById('updatePrompt');
+const updatePromptTitle=document.getElementById('updatePromptTitle');
+const updatePromptBody=document.getElementById('updatePromptBody');
+const updatePromptOpen=document.getElementById('updatePromptOpen');
+const updatePromptIgnore=document.getElementById('updatePromptIgnore');
+
+function updateConnectedState(repo){
+  const connected=!!repo.trim();
+  openLatestBtn.disabled=!updateUrl;
+  openReleasesBtn.disabled=!connected;
+  openRepoBtn.disabled=!connected;
+  if(!connected){
+    updateUrl=null;
+    updateStatus.textContent='No GitHub repository connected.';
+  }
+}
+function updateStatusText(message, highlightTag){
+  updateStatus.replaceChildren();
+  if(highlightTag&&message.includes(highlightTag)){
+    const idx=message.indexOf(highlightTag);
+    if(idx>0)updateStatus.append(document.createTextNode(message.slice(0,idx)));
+    const b=document.createElement('b');b.textContent=highlightTag;updateStatus.append(b);
+    const rest=message.slice(idx+highlightTag.length);
+    if(rest)updateStatus.append(document.createTextNode(rest));
+    return;
+  }
+  updateStatus.textContent=message;
+}
+function isIgnoredUpdate(check){
+  return !!check&&lastState?.config?.ignored_update_tag===check.latest_tag;
+}
+function renderUpdatePrompt(check){
+  if(!check||!check.update_available||isIgnoredUpdate(check)||lastState?.config?.update_prompt_mode==='Manual only'){
+    promptUpdate=null;
+    updatePrompt.classList.remove('show');
+    return;
+  }
+  promptUpdate=check;
+  updateUrl=check.asset_url||check.url;
+  openLatestBtn.disabled=false;
+  updatePromptTitle.textContent=check.latest_tag+' is available';
+  updatePromptBody.textContent=check.notes_excerpt||'Download the latest OMNAFK setup from GitHub.';
+  updatePrompt.classList.add('show');
+}
+function ignorePromptUpdate(){
+  if(!promptUpdate)return;
+  const tag=promptUpdate.latest_tag;
+  inv('ignore_update',{tag})
+    .then(st=>{promptUpdate=null;updatePrompt.classList.remove('show');if(st)apply(st);})
+    .catch(error=>{updateStatus.textContent=String(error);activatePane('settings');});
+}
+function saveGithubRepo(){
+  const repo=githubRepo.value.trim();
+  inv('set_config',{key:'github_repo',value:repo})
+    .then(st=>{if(st){apply(st);if(repo)updateStatus.textContent='GitHub repository connected.';}})
+    .catch(error=>{updateStatus.textContent=String(error);});
+}
+githubRepo.addEventListener('blur',saveGithubRepo);
+githubRepo.addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();githubRepo.blur();}
+});
+function applyUpdateCheckResult(result){
+  if(!result)return;
+  updateUrl=result.asset_url||result.url;
+  openLatestBtn.disabled=false;
+  const tag=result.latest_tag;
+  updateStatusText(result.update_available
+    ? tag+' available from '+result.repo+'.'
+    : 'Up to date on '+tag+'.',tag);
+  renderUpdatePrompt(result.update_available?result:null);
+}
+let updateCheckPending=false;
+function runUpdateCheck(){
+  if(updateCheckPending)return;
+  updateCheckPending=true;
+  updateStatus.textContent='Checking GitHub Releases...';
+  checkUpdateBtn.disabled=true;
+  inv('check_updates')
+    .then(started=>{
+      if(!started){
+        updateCheckPending=false;
+        checkUpdateBtn.disabled=false;
+        updateStatus.textContent='Preview mode: GitHub updates need the app runtime.';
+        return;
+      }
+      if(!started.started){
+        updateCheckPending=false;
+        checkUpdateBtn.disabled=false;
+        updateStatus.textContent='Update check already in progress.';
+      }
+    })
+    .catch(error=>{
+      updateCheckPending=false;
+      updateUrl=null;
+      updateStatus.textContent=String(error);
+      checkUpdateBtn.disabled=false;
+    });
+}
+checkUpdateBtn.addEventListener('click',runUpdateCheck);
+openLatestBtn.addEventListener('click',()=>{if(updateUrl)inv('open_github_url',{url:updateUrl}).catch(error=>{updateStatus.textContent=String(error);});});
+updatePromptOpen.addEventListener('click',()=>{
+  if(!promptUpdate)return;
+  updatePromptOpen.disabled=true;
+  updatePromptOpen.textContent='Downloading...';
+  inv('run_app_update').catch(error=>{
+    updatePromptOpen.disabled=false;
+    updatePromptOpen.textContent='Update';
+    const url=promptUpdate.asset_url||promptUpdate.url;
+    inv('open_github_url',{url}).catch(fallbackError=>{
+      updateStatus.textContent=String(fallbackError||error);
+      activatePane('settings');
+    });
+  });
+});
+updatePromptIgnore.addEventListener('click',ignorePromptUpdate);
+openReleasesBtn.addEventListener('click',()=>inv('open_github_releases').catch(error=>{updateStatus.textContent=String(error);}));
+openRepoBtn.addEventListener('click',()=>inv('open_github').catch(error=>{updateStatus.textContent=String(error);}));
+document.getElementById('aboutUpdateBtn').addEventListener('click',()=>{activatePane('settings');runUpdateCheck();});
+document.getElementById('aboutRepoBtn').addEventListener('click',()=>inv('open_github').catch(error=>{activatePane('settings');updateStatus.textContent=String(error);}));
+document.getElementById('aboutIssueBtn').addEventListener('click',()=>inv('open_github_issue').catch(error=>{activatePane('settings');updateStatus.textContent=String(error);}));
+document.getElementById('interfaceCollapseHead').addEventListener('click',()=>{
+  const body=document.getElementById('interfaceCollapseBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('interfaceCollapseHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+  inv('set_config',{key:'settings_interface_collapsed',value:!open});
+});
+document.getElementById('updatesCollapseHead').addEventListener('click',()=>{
+  const body=document.getElementById('updatesCollapseBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('updatesCollapseHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+  inv('set_config',{key:'settings_updates_collapsed',value:!open});
+});
+document.getElementById('maintenanceCollapseHead').addEventListener('click',()=>{
+  const body=document.getElementById('maintenanceCollapseBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('maintenanceCollapseHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+});
+document.getElementById('generalAdvancedHead').addEventListener('click',()=>{
+  const body=document.getElementById('generalAdvancedBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('generalAdvancedHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+  inv('set_config',{key:'general_advanced_collapsed',value:!open});
+});
+document.getElementById('statsMoreHead').addEventListener('click',()=>{
+  const body=document.getElementById('statsMoreBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('statsMoreHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+});
+document.getElementById('aboutDetailsHead').addEventListener('click',()=>{
+  const body=document.getElementById('aboutDetailsBody');
+  const open=!body.classList.contains('open');
+  document.getElementById('aboutDetailsHead').classList.toggle('open',open);
+  body.classList.toggle('open',open);
+});
+
+// ---------- about: changelog / diagnostics / license / credits ----------
+function toggleAboutBox(id){
+  const box=document.getElementById(id);
+  const show=!box.classList.contains('show');
+  document.querySelectorAll('.aboutbox').forEach(x=>x.classList.remove('show'));
+  box.classList.toggle('show',show);
+  return show;
+}
+document.getElementById('aboutLicenseBtn').addEventListener('click',()=>toggleAboutBox('licenseBox'));
+document.getElementById('aboutCreditsBtn').addEventListener('click',()=>toggleAboutBox('creditsBox'));
+document.getElementById('aboutChangelogBtn').addEventListener('click',()=>{
+  if(!toggleAboutBox('changelogBox'))return;
+  const box=document.getElementById('changelogBox');
+  box.textContent='Loading release notes…';
+  inv('get_changelog').then(notes=>{
+    if(!notes){box.textContent='Preview mode: release notes need the app runtime.';return;}
+    if(!notes.length){box.textContent='No releases found.';return;}
+    box.innerHTML='';
+    notes.forEach(n=>{
+      const b=document.createElement('b');b.textContent=n.tag+(n.title&&n.title!==n.tag?' — '+n.title:'');
+      const body=document.createTextNode('\n'+(n.body||'No notes.')+'\n\n');
+      box.append(b,body);
+    });
+  }).catch(err=>{box.textContent=String(err);});
+});
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(text);
+  return new Promise((resolve,reject)=>{
+    const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy')?resolve():reject(new Error('copy failed'));}
+    catch(e){reject(e);}finally{ta.remove();}
+  });
+}
+const diagBtn=document.getElementById('aboutDiagBtn');
+diagBtn.addEventListener('click',()=>{
+  inv('diagnostics').then(text=>{
+    if(!text)return;
+    return copyText(text).then(()=>{
+      diagBtn.textContent='Copied to clipboard';
+      setTimeout(()=>{diagBtn.textContent='Copy diagnostics';},2000);
+    });
+  }).catch(err=>showError(String(err)));
+});
+
+// ---------- settings buttons ----------
+function restartAsAdmin(){
+  inv('restart_as_admin').catch(err=>showError(String(err)));
+}
+document.getElementById('restartAdminBtn')?.addEventListener('click',restartAsAdmin);
+document.getElementById('warnRestartAdminBtn')?.addEventListener('click',restartAsAdmin);
+document.getElementById('alwaysMarkExes')?.addEventListener('change',function(){
+  const items=this.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  inv('set_config',{key:'always_mark_exes',value:items}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+document.getElementById('alwaysIgnoreExes')?.addEventListener('change',function(){
+  const items=this.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  inv('set_config',{key:'always_ignore_exes',value:items}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+});
+function bindTitleRule(id,key){
+  document.getElementById(id)?.addEventListener('change',function(){
+    const items=this.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    inv('set_config',{key,value:items}).then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+  });
+}
+bindTitleRule('markTitleContains','mark_title_contains');
+bindTitleRule('ignoreTitleContains','ignore_title_contains');
+document.getElementById('openLogBtn').addEventListener('click',()=>inv('open_log_file').catch(err=>showError(String(err))));
+const openCfg=()=>inv('open_config_dir').catch(err=>showError(String(err)));
+document.getElementById('openConfigBtn').addEventListener('click',openCfg);
+document.getElementById('cfgPath').addEventListener('click',openCfg);
+const resetSetBtn=document.getElementById('resetSettingsBtn');let rsT=null;
+resetSetBtn.addEventListener('click',()=>{
+  if(resetSetBtn.dataset.c){
+    delete resetSetBtn.dataset.c;resetSetBtn.textContent='Reset to defaults';clearTimeout(rsT);
+    inv('reset_settings').then(st=>st&&apply(st)).catch(err=>showError(String(err)));
+    return;
+  }
+  resetSetBtn.dataset.c='1';resetSetBtn.textContent='Click again to confirm';
+  rsT=setTimeout(()=>{resetSetBtn.textContent='Reset to defaults';delete resetSetBtn.dataset.c;},3000);
+});
+
+// ---------- hotkey recorders ----------
+const hk=document.getElementById('hotkey');
+hk.addEventListener('click',()=>{hk.textContent='PRESS KEYS…';hk.classList.add('rec');
+  const f=ev=>{ev.preventDefault();
+    const parts=[];if(ev.ctrlKey)parts.push('CTRL');if(ev.altKey)parts.push('ALT');if(ev.shiftKey)parts.push('SHIFT');
+    if(!['Control','Alt','Shift'].includes(ev.key)){parts.push(ev.key.toUpperCase());
+      const s=parts.join('+');hk.textContent=s;hk.classList.remove('rec');
+      window.removeEventListener('keydown',f,true);
+      inv('set_hotkey',{hotkey:s}).catch(err=>{
+        showError(String(err));
+        hk.textContent=lastState?.config?.hotkey||'CTRL+ALT+K';
+      });}};
+  window.addEventListener('keydown',f,true);});
+const shkBtn=document.getElementById('suspendHotkey');
+shkBtn.addEventListener('click',()=>{shkBtn.textContent='PRESS KEYS… (ESC CLEARS)';shkBtn.classList.add('rec');
+  const f=ev=>{ev.preventDefault();
+    if(ev.key==='Escape'){
+      shkBtn.textContent='NONE';shkBtn.classList.remove('rec');
+      window.removeEventListener('keydown',f,true);
+      inv('set_config',{key:'suspend_hotkey',value:''}).then(st=>st&&apply(st));
+      return;
+    }
+    const parts=[];if(ev.ctrlKey)parts.push('CTRL');if(ev.altKey)parts.push('ALT');if(ev.shiftKey)parts.push('SHIFT');
+    if(!['Control','Alt','Shift'].includes(ev.key)){parts.push(ev.key.toUpperCase());
+      const s=parts.join('+');shkBtn.textContent=s;shkBtn.classList.remove('rec');
+      window.removeEventListener('keydown',f,true);
+      inv('set_config',{key:'suspend_hotkey',value:s}).then(st=>st&&apply(st)).catch(err=>{
+        showError(String(err));
+        shkBtn.textContent=lastState?.config?.suspend_hotkey||'NONE';
+      });}};
+  window.addEventListener('keydown',f,true);});
+
+// ---------- import / export / reset ----------
+document.getElementById('importBtn').addEventListener('click',()=>inv('import_settings'));
+document.getElementById('exportBtn').addEventListener('click',()=>inv('export_settings'));
+const resetBtn=document.getElementById('resetBtn');let rt=null;
+resetBtn.addEventListener('click',()=>{
+  if(resetBtn.dataset.c){inv('reset_stats');
+    resetBtn.textContent='Reset statistics';delete resetBtn.dataset.c;clearTimeout(rt);return;}
+  resetBtn.dataset.c='1';resetBtn.textContent='Click again to confirm';
+  rt=setTimeout(()=>{resetBtn.textContent='Reset statistics';delete resetBtn.dataset.c;},3000);
+});
+
+// ---------- state stream ----------
+let lastTicks=-1,lastState=null;
+function apply(st){
+  lastState=st;
+  renderVersion(st.version,st.config);
+  renderConfig(st.config);renderCommunityStatus(st);renderTargets(st);renderStatus(st);renderStats(st);
+  renderUpdatePrompt(st.update);
+  if(st.stats.actions!==lastTicks&&lastTicks>=0){
+    pulse.classList.remove('fire');void pulse.offsetWidth;pulse.classList.add('fire');}
+  lastTicks=st.stats.actions;
+}
+if(T){
+  T.event.listen('omnafk://state',e=>apply(e.payload));
+  T.event.listen('omnafk://update-check',e=>{
+    updateCheckPending=false;
+    checkUpdateBtn.disabled=false;
+    const payload=e.payload;
+    if(!payload)return;
+    if(payload.kind==='error'){
+      updateUrl=null;
+      updateStatus.textContent=payload.message||'Update check failed.';
+      return;
+    }
+    if(payload.kind==='result'&&payload.check)applyUpdateCheckResult(payload.check);
+  });
+  T.event.listen('omnafk://toast',e=>showFlyoutToast(e.payload));
+  T.event.listen('omnafk://open-settings',e=>{
+    activatePane('settings');
+    if(e.payload==='updates')runUpdateCheck();
+  });
+  inv('get_state').then(st=>st&&apply(st));
+  inv('list_monitors').then(list=>{monitorsCache=list||[];if(lastState?.config)syncMonitorUI(lastState.config);}).catch(()=>{});
+}else{
+  apply({version:'0.1.16',engine:'dormant',next_tick:null,error:null,games:[],
+          stats:{kept:0,actions:0,seen:0,current_streak:0,longest_streak:0,
+                 lifetime_kept:0,lifetime_actions:0,actions_by_type:{},daily:[],lifetime_games:[]},
+          update:null,paused_reason:null,snooze_remaining:null,log:[],
+          config:{manual_mode:false,randomize:true,jitter_pct:15,send_without_focus:false,hold_while_playing:true,
+                  hold_window_secs:60,idle_threshold_mins:0,pause_on_battery:false,pause_when_locked:false,
+                  max_session_hours:0,max_session_actions:0,
+                  quiet_hours_enabled:false,quiet_start:'23:00',quiet_end:'07:00',quiet_days:'Every day',
+                  remote_alerts:false,ntfy_topic:'',discord_webhook:'',
+                  autostart:true,autostart_status:'ok',user_presets:[],show_on_launch:false,remember_pin:true,interval:540,
+                  action:'W tap',adaptive_actions:true,auto_fallback:true,auto_elevate:true,adaptive_min_samples:20,
+                  adaptive_learn_sequences:true,adaptive_learn_actions:true,adaptive_interval:true,burst_detection:true,keep_all_instances:false,rotate_actions:false,gamepad_kind:'Xbox 360',headless:false,
+                  community_intelligence:false,
+                  always_mark_exes:[],always_ignore_exes:[],mark_title_contains:[],ignore_title_contains:[],key_sequence:[],sensitivity:'Standard',notifications:'Errors only',
+                  hotkey:'CTRL+ALT+K',suspend_hotkey:'',github_repo:'OMNHZN/OMNAFK',
+                  check_updates_on_launch:true,ignored_update_tag:null,last_tab:'targets',
+                  settings_interface_collapsed:true,settings_updates_collapsed:false,general_advanced_collapsed:true,
+                  target_view:'All',target_density:'Compact',target_sort:'Status',favorite_targets:[],
+                  tab_label_mode:'Active only',version_display:'Title + About',
+                  safety_note_display:'Compact',update_prompt_mode:'Automatic',
+                  file_logging:false,monitor_placement:false,monitor_device:null,
+                  monitor_when:'Always',monitor_style:'Preserve size',monitor_skip_active:true,monitor_skip_active_secs:5,
+                  tour_done:true,armed_overrides:[]}});
+}
+
+</script>
+</body>
+</html>
+
