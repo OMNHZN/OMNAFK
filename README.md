@@ -67,7 +67,7 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 The app is connected to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check releases, install stable updates, open the repository, and start a bug report.
 
-New stable version tags, such as `v0.1.16`, build and attach the custom setup executable to GitHub Releases.
+New stable version tags, such as `v0.1.17`, build and attach the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
@@ -109,9 +109,9 @@ Local installer builds are written to `dist\OMNAFK-Setup.exe`.
 <summary>Release checklist</summary>
 
 ```powershell
-git tag v0.1.16
+git tag v0.1.17
 git push origin main
-git push origin v0.1.16
+git push origin v0.1.17
 ```
 
 GitHub Actions builds the Windows installer and publishes it to GitHub Releases. See [docs/RELEASING.md](docs/RELEASING.md) for the full release checklist.

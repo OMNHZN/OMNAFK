@@ -1102,11 +1102,26 @@ pub fn run_app_update(app: AppHandle, engine: State<'_, SharedEngine>) -> Result
     install_pending_update(&app, engine.inner())
 }
 
+static INSTALL_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
 /// Download, verify, install, and relaunch the pending update, then exit.
-/// Shared by the manual "Update now" button and the Automatic launch path.
+/// Shared by the manual "Update now" button and the automatic update path.
 /// Requires the update prompt to be set (so `snapshot.update` carries the
-/// release to install).
+/// release to install). Guarded so periodic checks and a manual click cannot
+/// launch two installers for the same release.
 pub(crate) fn install_pending_update(app: &AppHandle, engine: &SharedEngine) -> Result<(), String> {
+    if INSTALL_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    let outcome = run_pending_update_install(app, engine);
+    if outcome.is_err() {
+        INSTALL_IN_FLIGHT.store(false, Ordering::SeqCst);
+    }
+    outcome
+}
+
+fn run_pending_update_install(app: &AppHandle, engine: &SharedEngine) -> Result<(), String> {
     let snapshot = engine.snapshot();
     let check = snapshot
         .update

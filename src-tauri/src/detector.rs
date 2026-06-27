@@ -248,7 +248,8 @@ fn gather_window_facts(
 
     let modules = process.modules;
     let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
-    let negative_class = !known_game && is_negative_window(&exe, &wclass, path.as_deref(), supplement);
+    let negative_class =
+        !known_game && is_negative_window(&exe, &wclass, path.as_deref(), supplement);
     let gpu_active = gpu.usage_for_pid(pid).is_some();
     let audio_active = audio.is_active(pid);
     let title = if raw_title.is_empty() {
@@ -949,18 +950,48 @@ mod tests {
 
     #[test]
     fn store_launchers_are_negative() {
-        assert!(is_negative_window("EpicGamesLauncher.exe", "UnrealWindow", None, None));
-        assert!(is_negative_window("Steam.exe", "vguiPopupWindow", None, None));
-        assert!(is_negative_window("LeagueClient.exe", "RCLIENT", None, None));
+        assert!(is_negative_window(
+            "EpicGamesLauncher.exe",
+            "UnrealWindow",
+            None,
+            None
+        ));
+        assert!(is_negative_window(
+            "Steam.exe",
+            "vguiPopupWindow",
+            None,
+            None
+        ));
+        assert!(is_negative_window(
+            "LeagueClient.exe",
+            "RCLIENT",
+            None,
+            None
+        ));
     }
 
     #[test]
     fn common_desktop_apps_are_negative() {
-        assert!(is_negative_window("Zoom.exe", "ZPContentViewWndClass", None, None));
+        assert!(is_negative_window(
+            "Zoom.exe",
+            "ZPContentViewWndClass",
+            None,
+            None
+        ));
         assert!(is_negative_window("Photoshop.exe", "Photoshop", None, None));
-        assert!(is_negative_window("blender.exe", "GHOST_WindowClass", None, None));
+        assert!(is_negative_window(
+            "blender.exe",
+            "GHOST_WindowClass",
+            None,
+            None
+        ));
         // A real game is unaffected by the desktop-app list.
-        assert!(!is_negative_window("eldenring.exe", "FromSoftwareWindow", None, None));
+        assert!(!is_negative_window(
+            "eldenring.exe",
+            "FromSoftwareWindow",
+            None,
+            None
+        ));
     }
 
     #[test]

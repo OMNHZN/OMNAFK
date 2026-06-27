@@ -489,9 +489,7 @@ fn parse_theme(value: &str) -> Result<Theme, String> {
     match value {
         "Dark" => Ok(Theme::Dark),
         "High contrast" => Ok(Theme::HighContrast),
-        _ => Err(
-            "Couldn't set theme - choose Dark or High contrast to fix this.".to_string(),
-        ),
+        _ => Err("Couldn't set theme - choose Dark or High contrast to fix this.".to_string()),
     }
 }
 

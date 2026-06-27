@@ -161,13 +161,17 @@ pub fn run() {
                 notifications,
             );
 
-            if update_options.enabled
+            let automatic_updates = matches!(
+                update_options.update_prompt_mode,
+                config::UpdatePromptMode::Automatic
+            );
+            let update_check_allowed = (update_options.enabled || automatic_updates)
                 && !update_options.github_repo.trim().is_empty()
                 && !matches!(
                     update_options.update_prompt_mode,
                     config::UpdatePromptMode::ManualOnly
-                )
-            {
+                );
+            if update_check_allowed {
                 startup_log::info("update check queued for launch");
             } else {
                 startup_log::info("launch update check skipped");
@@ -176,6 +180,10 @@ pub fn run() {
             maybe_check_updates_on_launch(
                 app.handle().clone(),
                 update_options,
+                app.state::<engine::SharedEngine>().inner().clone(),
+            );
+            spawn_periodic_update_check(
+                app.handle().clone(),
                 app.state::<engine::SharedEngine>().inner().clone(),
             );
 
@@ -385,12 +393,48 @@ struct LaunchUpdateCheckOptions {
     notifications: config::NotificationLevel,
 }
 
+impl LaunchUpdateCheckOptions {
+    fn from_config(config: &config::AppConfig) -> Self {
+        Self {
+            github_repo: config.github_repo.clone(),
+            enabled: config.check_updates_on_launch,
+            ignored_update_tag: config.ignored_update_tag.clone(),
+            update_prompt_mode: config.update_prompt_mode,
+            notifications: config.notifications,
+        }
+    }
+}
+
 fn maybe_check_updates_on_launch(
     app: tauri::AppHandle,
     options: LaunchUpdateCheckOptions,
     engine: engine::SharedEngine,
 ) {
-    if !options.enabled
+    perform_update_check(app, options, engine, true);
+}
+
+/// Long-running tray sessions should still see stable updates without relaunching.
+const PERIODIC_UPDATE_CHECK: std::time::Duration = std::time::Duration::from_secs(6 * 3600);
+
+fn spawn_periodic_update_check(app: tauri::AppHandle, engine: engine::SharedEngine) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(PERIODIC_UPDATE_CHECK);
+        let options = LaunchUpdateCheckOptions::from_config(&engine.snapshot().config);
+        perform_update_check(app.clone(), options, engine.clone(), false);
+    });
+}
+
+fn perform_update_check(
+    app: tauri::AppHandle,
+    options: LaunchUpdateCheckOptions,
+    engine: engine::SharedEngine,
+    notify: bool,
+) {
+    let automatic = matches!(
+        options.update_prompt_mode,
+        config::UpdatePromptMode::Automatic
+    );
+    if (!options.enabled && !automatic)
         || options.github_repo.trim().is_empty()
         || matches!(
             options.update_prompt_mode,
@@ -409,12 +453,9 @@ fn maybe_check_updates_on_launch(
                 engine.set_update_prompt(Some(check.clone()));
                 let _ = ipc::emit_state(&app, &engine);
 
-                if matches!(
-                    options.update_prompt_mode,
-                    config::UpdatePromptMode::Automatic
-                ) {
+                if automatic {
                     // Never yank the app out from under an active keepalive
-                    // session; leave the prompt up and install on a later launch.
+                    // session; leave the prompt up and install on a later check.
                     let busy = matches!(
                         engine.snapshot().engine,
                         engine::EngineStatus::Active | engine::EngineStatus::Holding
@@ -440,13 +481,14 @@ fn maybe_check_updates_on_launch(
                 if matches!(
                     options.update_prompt_mode,
                     config::UpdatePromptMode::CardAndToast
-                ) && !matches!(options.notifications, config::NotificationLevel::None)
+                ) && notify
+                    && !matches!(options.notifications, config::NotificationLevel::None)
                 {
                     notifications::deliver(&app, &notifications::QueuedNotice::info(body));
                 }
             }
             Ok(_) => {}
-            Err(error) => startup_log::warn(format!("launch update check failed: {error}")),
+            Err(error) => startup_log::warn(format!("update check failed: {error}")),
         }
     });
 }

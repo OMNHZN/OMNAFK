@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.17
+
+- Added periodic stable update checks for long-running tray sessions.
+- Kept automatic update installs enabled even when launch notifications are turned off.
+- Migrated users on the old default update prompt to automatic updates while preserving quieter/manual choices.
+- Guarded update installs so the manual button and automatic checks cannot launch duplicate installers.
+
 ## v0.1.16
 
 - Added starred Sightline targets so important games can stay pinned near the top of the target list.

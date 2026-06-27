@@ -55,10 +55,12 @@ pub fn send_test(config: &AppConfig) -> Result<String, String> {
     if ntfy.is_none() && discord.is_none() {
         return Err("Add an ntfy topic or a Discord webhook URL first.".to_string());
     }
-    let client = build_client().map_err(|error| format!("Couldn't prepare the request: {error}"))?;
+    let client =
+        build_client().map_err(|error| format!("Couldn't prepare the request: {error}"))?;
     let mut sent = Vec::new();
     if let Some(url) = ntfy {
-        post_ntfy(&client, &url, "OMNAFK", TEST_BODY).map_err(|error| format!("ntfy test failed: {error}"))?;
+        post_ntfy(&client, &url, "OMNAFK", TEST_BODY)
+            .map_err(|error| format!("ntfy test failed: {error}"))?;
         sent.push("ntfy");
     }
     if let Some(url) = discord {
@@ -76,7 +78,12 @@ fn build_client() -> reqwest::Result<reqwest::blocking::Client> {
         .build()
 }
 
-fn post_ntfy(client: &reqwest::blocking::Client, url: &str, title: &str, message: &str) -> reqwest::Result<()> {
+fn post_ntfy(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    title: &str,
+    message: &str,
+) -> reqwest::Result<()> {
     client
         .post(url)
         .header("Title", title)
@@ -138,7 +145,10 @@ mod tests {
 
     #[test]
     fn bare_topic_targets_public_ntfy() {
-        assert_eq!(ntfy_url("omnafk-abc123"), Some("https://ntfy.sh/omnafk-abc123".to_string()));
+        assert_eq!(
+            ntfy_url("omnafk-abc123"),
+            Some("https://ntfy.sh/omnafk-abc123".to_string())
+        );
     }
 
     #[test]

@@ -431,6 +431,9 @@ pub struct AppConfig {
     pub auto_elevate: bool,
     #[serde(default)]
     pub zero_config_migrated: bool,
+    /// One-time flag for moving users from the old default prompt to automatic updates.
+    #[serde(default)]
+    pub auto_update_migrated: bool,
 
     pub suspended: bool,
     pub pin_position: Option<PinPosition>,
@@ -496,6 +499,7 @@ impl Default for AppConfig {
             background_delivery_migrated: true,
             auto_elevate: true,
             zero_config_migrated: true,
+            auto_update_migrated: true,
             hold_while_playing: true,
             hold_window_secs: 60,
             idle_threshold_mins: 0,
@@ -592,6 +596,13 @@ impl AppConfig {
             }
             self.auto_elevate = true;
             self.zero_config_migrated = true;
+            changed = true;
+        }
+        if !self.auto_update_migrated {
+            if self.update_prompt_mode == UpdatePromptMode::CardAndToast {
+                self.update_prompt_mode = UpdatePromptMode::Automatic;
+            }
+            self.auto_update_migrated = true;
             changed = true;
         }
         changed
@@ -1191,6 +1202,7 @@ fn merge_config_field(config: &mut AppConfig, key: &str, value: serde_json::Valu
     merge!(community_dismissed_exes: Vec<String>);
     merge!(auto_elevate: bool);
     merge!(zero_config_migrated: bool);
+    merge!(auto_update_migrated: bool);
     merge!(suspended: bool);
     merge!(pin_position: Option<PinPosition>);
     merge!(first_run_notified: bool);
@@ -1393,15 +1405,50 @@ mod tests {
         let mut config = AppConfig::default();
         assert!(config.exe_ignore_override("Zoom.exe").is_none());
         config.always_ignore_exes = vec!["zoom.exe".to_string()];
-        assert_eq!(config.exe_ignore_override("Zoom.exe"), Some(OverrideVerdict::Ignored));
+        assert_eq!(
+            config.exe_ignore_override("Zoom.exe"),
+            Some(OverrideVerdict::Ignored)
+        );
         assert!(config.exe_ignore_override("game.exe").is_none());
     }
 
     #[test]
     fn update_prompt_mode_serde_has_automatic() {
-        assert_eq!(serde_json::to_string(&UpdatePromptMode::Automatic).unwrap(), "\"Automatic\"");
+        assert_eq!(
+            serde_json::to_string(&UpdatePromptMode::Automatic).unwrap(),
+            "\"Automatic\""
+        );
         let parsed: UpdatePromptMode = serde_json::from_str("\"Automatic\"").unwrap();
         assert_eq!(parsed, UpdatePromptMode::Automatic);
+    }
+
+    #[test]
+    fn migrate_moves_old_default_update_prompt_to_automatic() {
+        let mut config = AppConfig {
+            update_prompt_mode: UpdatePromptMode::CardAndToast,
+            auto_update_migrated: false,
+            ..AppConfig::default()
+        };
+
+        assert!(config.migrate());
+        assert_eq!(config.update_prompt_mode, UpdatePromptMode::Automatic);
+        assert!(config.auto_update_migrated);
+        assert!(!config.migrate());
+    }
+
+    #[test]
+    fn migrate_preserves_reduced_update_prompt_choices() {
+        for mode in [UpdatePromptMode::CardOnly, UpdatePromptMode::ManualOnly] {
+            let mut config = AppConfig {
+                update_prompt_mode: mode,
+                auto_update_migrated: false,
+                ..AppConfig::default()
+            };
+
+            assert!(config.migrate());
+            assert_eq!(config.update_prompt_mode, mode);
+            assert!(config.auto_update_migrated);
+        }
     }
 
     #[test]
