@@ -19,7 +19,6 @@ use windows::Win32::System::Performance::{
 };
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
-const ACTIVE_THRESHOLD: f32 = 1.0;
 
 pub struct PdhGpuProbe {
     inner: Mutex<ProbeInner>,
@@ -123,8 +122,9 @@ impl ProbeInner {
         if status != ERROR_SUCCESS.0 {
             return None;
         }
-        let usage = unsafe { value.Anonymous.doubleValue } as f32;
-        (usage >= ACTIVE_THRESHOLD).then_some(usage)
+        // Raw value, including ~0: callers threshold for "active" while menu
+        // sensing needs the near-zero readings too.
+        Some(unsafe { value.Anonymous.doubleValue } as f32)
     }
 }
 

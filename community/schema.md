@@ -29,6 +29,47 @@
 | `fallback_order` | No | `FocusFlick`, `CameraNudge`, or `Normal` |
 | `monitor_style` | No | Short monitor placement hint |
 | `monitor_note` | No | Plain-language placement note |
+| `presence` | No | Layered in-game vs menu detection rules (see below) |
+
+## Presence (optional)
+
+Optional `presence` object on a game entry drives log tailing, screen sampling, and memory reads. Heuristic GPU/title detection always runs locally; manifest layers add higher-trust signals.
+
+```json
+"presence": {
+  "log": {
+    "paths": ["%APPDATA%\\.minecraft\\logs\\latest.log"],
+    "poll_secs": 3,
+    "in_game": ["joined the game"],
+    "menu": ["main menu", "disconnecting"]
+  },
+  "screen": {
+    "sample_w": 96,
+    "sample_h": 54,
+    "interval_secs": 8,
+    "variance_max_menu": 0.018,
+    "variance_min_game": 0.045
+  },
+  "memory": {
+    "reads": [{
+      "module": "game.exe",
+      "offset": 0,
+      "signature": "48 8B ?? 05",
+      "offset_from_match": 4,
+      "size": 4,
+      "in_game_values": [1],
+      "menu_values": [0]
+    }]
+  }
+}
+```
+
+| Sub-field | Notes |
+| --- | --- |
+| `log.paths` | File or glob; `%ENV%` expansion supported |
+| `log.in_game` / `log.menu` | Case-insensitive substrings; most recent match wins |
+| `screen` | Local thumbnail variance; defaults apply when omitted |
+| `memory.reads` | Expert-only; fixed offset or signature scan |
 
 ## Profile Files
 

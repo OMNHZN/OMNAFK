@@ -427,6 +427,18 @@ pub struct AppConfig {
     pub community_client_id: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub community_dismissed_exes: Vec<String>,
+    /// Tail log files from community manifest for in-game vs menu detection.
+    #[serde(default = "default_true")]
+    pub presence_log_enabled: bool,
+    /// Sample game window pixels for static vs active frames (local only).
+    #[serde(default = "default_true")]
+    pub presence_screen_enabled: bool,
+    /// Read manifest-defined memory patterns (expert; use at your own risk).
+    #[serde(default)]
+    pub presence_memory_enabled: bool,
+    /// Hold keepalives when high-confidence presence says menu/lobby.
+    #[serde(default = "default_true")]
+    pub respect_presence: bool,
     #[serde(default = "default_true")]
     pub auto_elevate: bool,
     #[serde(default)]
@@ -563,6 +575,10 @@ impl Default for AppConfig {
             community_intelligence: false,
             community_client_id: String::new(),
             community_dismissed_exes: Vec::new(),
+            presence_log_enabled: true,
+            presence_screen_enabled: true,
+            presence_memory_enabled: false,
+            respect_presence: true,
             suspended: false,
             pin_position: None,
             first_run_notified: false,
@@ -1200,6 +1216,10 @@ fn merge_config_field(config: &mut AppConfig, key: &str, value: serde_json::Valu
     merge!(community_intelligence: bool);
     merge!(community_client_id: String);
     merge!(community_dismissed_exes: Vec<String>);
+    merge!(presence_log_enabled: bool);
+    merge!(presence_screen_enabled: bool);
+    merge!(presence_memory_enabled: bool);
+    merge!(respect_presence: bool);
     merge!(auto_elevate: bool);
     merge!(zero_config_migrated: bool);
     merge!(auto_update_migrated: bool);
@@ -1366,6 +1386,10 @@ mod tests {
         assert!(!config.rotate_actions);
         assert_eq!(config.gamepad_kind, GamepadKind::Xbox360);
         assert!(!config.community_intelligence);
+        assert!(config.presence_log_enabled);
+        assert!(config.presence_screen_enabled);
+        assert!(!config.presence_memory_enabled);
+        assert!(config.respect_presence);
         assert_eq!(config.adaptive_min_samples, 20);
         assert!(config.key_sequence.is_empty());
         assert!(!config.send_without_focus);

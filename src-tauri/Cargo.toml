@@ -1,6 +1,6 @@
 [package]
 name = "omnafk"
-version = "0.1.17"
+version = "0.1.18"
 description = "Tray-first anti-AFK utility for Windows."
 authors = ["OMNAFK"]
 license = "MIT"
@@ -61,6 +61,8 @@ windows = { version = "0.61", features = [
   "Win32_System_Registry",
   "Win32_System_StationsAndDesktops",
   "Win32_System_SystemInformation",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Memory",
   "Win32_System_Threading",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Input_XboxController",

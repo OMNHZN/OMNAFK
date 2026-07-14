@@ -211,6 +211,7 @@ mod tests {
             known_game: false,
             negative_class: false,
             gpu_active: false,
+            gpu_usage: None,
             audio_active: false,
             elevated: None,
         }

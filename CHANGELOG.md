@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.18
+
+- Added presence sensing for menu/lobby vs in-session states using safe local signals.
+- Added Sightline presence details so targets can show when OMNAFK thinks a game is in session, at a menu, or being held.
+- Added community manifest presence rules for GTA V and Minecraft variants.
+- Made Hold while I'm playing respect the foreground game window so input in other apps does not starve background keepalives.
+- Added polite focus-flick deferral so background ticks wait for a quiet input moment.
+- Reduced tray icon repaint flicker while keeping active/holding eyes steady.
+
 ## v0.1.17
 
 - Added periodic stable update checks for long-running tray sessions.

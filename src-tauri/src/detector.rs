@@ -44,6 +44,8 @@ pub struct WindowFacts {
     pub known_game: bool,
     pub negative_class: bool,
     pub gpu_active: bool,
+    /// GPU utilization percentage (0-100) when the PDH probe has a reading.
+    pub gpu_usage: Option<u8>,
     pub audio_active: bool,
     /// The target process runs elevated (None when we couldn't query it).
     pub elevated: Option<bool>,
@@ -64,7 +66,11 @@ pub struct DetectedWindow {
     pub verdict: Verdict,
 }
 
+/// GPU load below this doesn't count as "active" for detection scoring.
+const GPU_ACTIVE_THRESHOLD: f32 = 1.0;
+
 pub trait GpuUsageProbe: Send + Sync {
+    /// Raw utilization percentage for the process, `None` when unknown.
     fn usage_for_pid(&self, pid: u32) -> Option<f32>;
 }
 
@@ -250,7 +256,9 @@ fn gather_window_facts(
     let gfx_dll = modules.iter().any(|module| is_graphics_module(module));
     let negative_class =
         !known_game && is_negative_window(&exe, &wclass, path.as_deref(), supplement);
-    let gpu_active = gpu.usage_for_pid(pid).is_some();
+    let gpu_usage_raw = gpu.usage_for_pid(pid);
+    let gpu_active = gpu_usage_raw.is_some_and(|usage| usage >= GPU_ACTIVE_THRESHOLD);
+    let gpu_usage = gpu_usage_raw.map(|usage| usage.round().clamp(0.0, 100.0) as u8);
     let audio_active = audio.is_active(pid);
     let title = if raw_title.is_empty() {
         fallback_title(&exe, path.as_deref())
@@ -272,6 +280,7 @@ fn gather_window_facts(
             known_game,
             negative_class,
             gpu_active,
+            gpu_usage,
             audio_active,
             elevated: process.elevated,
         },
@@ -761,6 +770,7 @@ mod tests {
             known_game: false,
             negative_class: false,
             gpu_active: false,
+            gpu_usage: None,
             audio_active: false,
             elevated: None,
         }

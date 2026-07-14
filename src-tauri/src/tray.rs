@@ -57,7 +57,7 @@ fn attention_active() -> bool {
 pub fn install(app: &AppHandle, engine: SharedEngine) -> tauri::Result<()> {
     let app_handle = app.clone();
     let tray = TrayIconBuilder::with_id("omnafk-tray")
-        .icon(icon_for(EngineStatus::Dormant, false, false)?)
+        .icon(icon_image(IconKind::Dormant)?)
         .tooltip("OMNAFK - DORMANT")
         .show_menu_on_left_click(false)
         .on_tray_icon_event({
@@ -144,6 +144,7 @@ fn handle_tray_event(tray: &TrayIcon<Wry>, event: TrayIconEvent, _engine: &Share
 fn spawn_tray_state_loop(tray: TrayIcon<Wry>, engine: SharedEngine, app: AppHandle) {
     thread::spawn(move || {
         let blink = AtomicBool::new(false);
+        let mut last_icon: Option<IconKind> = None;
         loop {
             let fast = attention_active();
             thread::sleep(if fast {
@@ -155,8 +156,14 @@ fn spawn_tray_state_loop(tray: TrayIcon<Wry>, engine: SharedEngine, app: AppHand
             let blink_on = blink.fetch_xor(true, Ordering::SeqCst);
             let state = snapshot.engine;
 
-            if let Ok(icon) = icon_for(state, blink_on, fast) {
-                let _ = tray.set_icon(Some(icon));
+            // Only swap the icon when it actually changes; re-setting the
+            // same image every second causes a visible tray repaint flicker.
+            let kind = icon_kind(state, blink_on, fast);
+            if last_icon != Some(kind) {
+                if let Ok(icon) = icon_image(kind) {
+                    let _ = tray.set_icon(Some(icon));
+                    last_icon = Some(kind);
+                }
             }
             let _ = tray.set_tooltip(Some(tooltip_for(&snapshot)));
 
@@ -256,19 +263,29 @@ fn compact_title(title: &str) -> String {
     out
 }
 
-fn icon_for(state: EngineStatus, blink_on: bool, attention: bool) -> tauri::Result<Image<'static>> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IconKind {
+    Active,
+    Dormant,
+    Suspended,
+}
+
+fn icon_kind(state: EngineStatus, blink_on: bool, attention: bool) -> IconKind {
     match state {
-        EngineStatus::Active => Image::from_bytes(include_bytes!("../icons/sentinel-active.png")),
-        EngineStatus::Holding if blink_on => {
-            Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))
-        }
-        EngineStatus::Holding => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
-        EngineStatus::Suspended => {
-            Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png"))
-        }
-        EngineStatus::Dormant if attention && blink_on => {
-            Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))
-        }
-        _ => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
+        EngineStatus::Active => IconKind::Active,
+        // Holding is a normal, expected state (you're playing, or a gate is
+        // on) — show steady open eyes; the tooltip carries the detail.
+        EngineStatus::Holding => IconKind::Active,
+        EngineStatus::Suspended => IconKind::Suspended,
+        EngineStatus::Dormant if attention && blink_on => IconKind::Active,
+        _ => IconKind::Dormant,
+    }
+}
+
+fn icon_image(kind: IconKind) -> tauri::Result<Image<'static>> {
+    match kind {
+        IconKind::Active => Image::from_bytes(include_bytes!("../icons/sentinel-active.png")),
+        IconKind::Suspended => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
+        IconKind::Dormant => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
     }
 }

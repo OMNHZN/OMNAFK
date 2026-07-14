@@ -10,11 +10,14 @@ use crate::{
     gpu::PdhGpuProbe,
     health::KeepaliveHealth,
     keepalive::{
-        self, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer, Win32ActivityProbe,
+        self, ActivityProbe, KeepaliveOptions, KeepaliveTarget, TickDecision, TickTimer,
+        Win32ActivityProbe,
     },
     learn::{self, AdaptivePick, LearnedSnapshot},
+    menu::MenuHint,
     monitor::{self, MonitorInfo, PlacementOptions, PlacementResult},
     notifications::{QueuedNotice, ToastAction, ToastKind},
+    presence::{self, PresenceSnapshot},
     stats::{PersistedStats, Stats, StatsSnapshot},
     updates::UpdateCheck,
 };
@@ -44,6 +47,12 @@ const MONITOR_CACHE_TTL: Duration = Duration::from_secs(30);
 const GONE_LINGER: Duration = Duration::from_secs(60);
 const ACTIVITY_LOG_CAP: usize = 50;
 const STATS_SAVE_INTERVAL: Duration = Duration::from_secs(30);
+/// How soon a gate-blocked tick is re-checked, so keepalives resume promptly
+/// after quiet hours end, power returns, or the session unlocks.
+const GATE_RECHECK_SECS: u64 = 30;
+/// How soon a presence-held (menu/lobby) tick is re-checked, so a wrong or
+/// stale menu read can't starve keepalives for a whole interval.
+const PRESENCE_RECHECK_SECS: u64 = 45;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -108,6 +117,12 @@ pub struct GameSnapshot {
     pub primary_keepalive: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community: Option<CommunityGameSnapshot>,
+    /// Layered presence: in-game vs menu (log, screen, memory, heuristic).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presence: Option<PresenceSnapshot>,
+    /// Legacy heuristic menu hint (also surfaced inside `presence.sources`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub menu_hint: Option<MenuHint>,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +239,10 @@ struct TrackedWindow {
     last_injected_input_tick: Option<u32>,
     /// Dedupes per-stretch "Held tick: recent input" activity logs.
     logged_recent_input_hold: bool,
+    /// Dedupes per-stretch "Held tick: presence menu/lobby" activity logs.
+    logged_presence_hold: bool,
+    /// Layered in-game vs menu detection for this window.
+    presence: presence::PresenceTracker,
 }
 
 struct KeepaliveSendPlan {
@@ -967,7 +986,10 @@ impl Engine {
             Err(error) => {
                 if let Some(window) = inner.windows.get_mut(&plan.identity) {
                     window.last_action_ok = Some(false);
-                    let _ = window.health.note_failure(plan.auto_fallback);
+                    // Transient refusals (focus lock) don't escalate fallbacks.
+                    if !error.is_transient() {
+                        let _ = window.health.note_failure(plan.auto_fallback);
+                    }
                 }
                 inner
                     .stats
@@ -1162,6 +1184,7 @@ impl EngineInner {
                     if window.hwnd != detected.hwnd {
                         window.monitor_placed = false;
                         window.monitor_status = None;
+                        window.presence.reset();
                     }
                     window.title = detected.facts.title.clone();
                     window.exe = detected.facts.exe.clone();
@@ -1189,6 +1212,10 @@ impl EngineInner {
                     actions: 0,
                     timer: None,
                     score: detected.score,
+                    presence: presence::PresenceTracker::seeded(
+                        detected.facts.gpu_usage,
+                        &detected.facts.title,
+                    ),
                     facts: detected.facts,
                     last_action_at: None,
                     last_action_ok: None,
@@ -1202,7 +1229,12 @@ impl EngineInner {
                     rotation_index: 0,
                     last_injected_input_tick: None,
                     logged_recent_input_hold: false,
+                    logged_presence_hold: false,
                 });
+
+            if let Some(window) = self.windows.get_mut(&identity) {
+                Self::update_window_presence(window, &self.config, community, now);
+            }
 
             if is_new && self.config.community_intelligence {
                 let mut rt = community.write();
@@ -1332,33 +1364,45 @@ impl EngineInner {
                     }
                 }
                 Err(error) => {
-                    keepalive_errors += 1;
-                    if let Some(window) = self.windows.get_mut(&plan.identity) {
-                        window.last_action_ok = Some(false);
-                        if let Some(warning) = window.health.note_failure(plan.auto_fallback) {
-                            self.push_log("error", warning.clone());
-                            if keepalive_errors == 1 {
-                                self.push_notice(QueuedNotice::error(
-                                    warning,
-                                    Some(ToastAction::OpenFlyout),
-                                ));
+                    if error.is_transient() {
+                        // Temporary refusal (e.g. Windows blocked the focus
+                        // switch): log quietly and retry at the next tick
+                        // without escalating fallbacks or backoff.
+                        self.push_log("info", error.to_string());
+                        tracing::info!("{error}");
+                    } else {
+                        keepalive_errors += 1;
+                        if let Some(window) = self.windows.get_mut(&plan.identity) {
+                            window.last_action_ok = Some(false);
+                            if let Some(warning) = window.health.note_failure(plan.auto_fallback) {
+                                self.push_log("error", warning.clone());
+                                if keepalive_errors == 1 {
+                                    self.push_notice(QueuedNotice::error(
+                                        warning,
+                                        Some(ToastAction::OpenFlyout),
+                                    ));
+                                }
                             }
                         }
-                    }
-                    self.stats
-                        .note_action_result(&plan.identity, &plan.title, &plan.label, false);
-                    if plan.community_enabled {
-                        community::record_keepalive(
-                            &plan.exe,
+                        self.stats.note_action_result(
+                            &plan.identity,
+                            &plan.title,
                             &plan.label,
                             false,
-                            plan.send_without_focus,
-                            &[],
                         );
+                        if plan.community_enabled {
+                            community::record_keepalive(
+                                &plan.exe,
+                                &plan.label,
+                                false,
+                                plan.send_without_focus,
+                                &[],
+                            );
+                        }
+                        self.last_error = Some(error.to_string());
+                        self.push_log("error", error.to_string());
+                        tracing::warn!("{error}");
                     }
-                    self.last_error = Some(error.to_string());
-                    self.push_log("error", error.to_string());
-                    tracing::warn!("{error}");
                 }
             }
             if let Some(window) = self.windows.get_mut(&plan.identity) {
@@ -1459,8 +1503,17 @@ impl EngineInner {
         if self.config.pause_on_battery && keepalive::on_battery() {
             return Some("ON BATTERY".to_string());
         }
-        if self.config.pause_when_locked && keepalive::session_locked() {
-            return Some("SESSION LOCKED".to_string());
+        if keepalive::session_locked() {
+            if self.config.pause_when_locked {
+                return Some("SESSION LOCKED".to_string());
+            }
+            // Real input can't reach games on a locked desktop, so sends would
+            // only fail with confusing errors. Hold automatically unless the
+            // user runs the background-only (PostMessage) delivery, which can
+            // still work while locked.
+            if !self.config.send_without_focus {
+                return Some("SESSION LOCKED".to_string());
+            }
         }
         let (minutes_now, dow_now) = {
             use chrono::{Datelike, Timelike};
@@ -1547,8 +1600,9 @@ impl EngineInner {
         let mut pending_sends: Vec<KeepaliveSendPlan> = Vec::new();
         let community_enabled = self.config.community_intelligence;
 
-        // Controller activity is global; poll once and OR it into per-target
-        // hold checks so a controller-only player isn't interrupted mid-game.
+        // Controller activity is global; poll once here. It only holds a
+        // target's ticks when that game is also the foreground window, so a
+        // controller session in one game never starves another game's keepalives.
         self.gamepad.poll(now);
         let gamepad_age = self.gamepad.last_active_age(now);
 
@@ -1617,6 +1671,7 @@ impl EngineInner {
             self.stats.note_seen_today(&identity);
 
             let gamepad_held = options.hold_while_playing
+                && activity.foreground_window() == Some(target.hwnd)
                 && gamepad_age
                     .is_some_and(|age| age <= Duration::from_secs(options.hold_window_secs.max(1)));
             if keepalive::should_hold(&target, &options, now, activity, ignore_input_tick)
@@ -1634,6 +1689,8 @@ impl EngineInner {
                 continue;
             };
 
+            let presence_hold = window.presence.should_hold_keepalives();
+
             match keepalive::tick_decision(
                 timer,
                 &target,
@@ -1643,6 +1700,11 @@ impl EngineInner {
                 ignore_input_tick,
             ) {
                 TickDecision::Waiting => {}
+                TickDecision::DeferBriefly => {
+                    // User is mid-input in another app: nudge the due time a
+                    // few seconds so the focus flick lands in a quiet moment.
+                    timer.defer(now, Duration::from_secs(keepalive::POLITE_DEFER_SECS));
+                }
                 TickDecision::Held => {
                     holding = true;
                     if !window.logged_recent_input_hold {
@@ -1655,8 +1717,23 @@ impl EngineInner {
                     timer.reschedule(now, &options, rng);
                 }
                 TickDecision::Send if gate.is_some() => {
-                    // A global gate (quiet hours, battery, lock, idle, cap) blocks the send.
-                    timer.reschedule(now, &options, rng);
+                    // A global gate (quiet hours, battery, lock, idle, cap)
+                    // blocks the send. Defer briefly instead of burning a full
+                    // interval, so ticks resume promptly once the gate clears.
+                    timer.defer(now, Duration::from_secs(GATE_RECHECK_SECS));
+                }
+                TickDecision::Send if presence_hold => {
+                    holding = true;
+                    if !window.logged_presence_hold {
+                        window.logged_presence_hold = true;
+                        log_entries.push((
+                            "info".into(),
+                            format!("Held tick: presence menu/lobby for {title}"),
+                        ));
+                    }
+                    // Re-check soon: if presence flips back to in-game (or was
+                    // wrong), the next keepalive shouldn't be an interval away.
+                    timer.defer(now, Duration::from_secs(PRESENCE_RECHECK_SECS));
                 }
                 TickDecision::Send => {
                     let auto_fallback = self
@@ -1664,8 +1741,10 @@ impl EngineInner {
                         .profile_for(&exe, &wclass)
                         .and_then(|profile| profile.auto_fallback)
                         .unwrap_or(self.config.auto_fallback);
-                    let resume_hold = window.logged_recent_input_hold;
+                    let resume_hold =
+                        window.logged_recent_input_hold || window.logged_presence_hold;
                     window.logged_recent_input_hold = false;
+                    window.logged_presence_hold = false;
                     if resume_hold {
                         log_entries.push(("info".into(), format!("Resumed tick for {title}")));
                     }
@@ -1702,6 +1781,27 @@ impl EngineInner {
         };
 
         pending_sends
+    }
+
+    fn update_window_presence(
+        window: &mut TrackedWindow,
+        config: &AppConfig,
+        community: &SharedCommunity,
+        now: Instant,
+    ) {
+        let rules = community::presence_rules_for(&community.read(), &window.exe);
+        window.presence.note(presence::PresenceInputs {
+            gpu_usage: window.facts.gpu_usage,
+            title: &window.facts.title,
+            hwnd: window.hwnd,
+            pid: window.pid,
+            rules: rules.as_ref(),
+            log_enabled: config.presence_log_enabled,
+            screen_enabled: config.presence_screen_enabled,
+            memory_enabled: config.presence_memory_enabled,
+            respect_presence: config.respect_presence,
+            now,
+        });
     }
 
     fn next_tick(&self, now: Instant) -> Option<u64> {
@@ -1768,6 +1868,15 @@ impl TrackedWindow {
             success_rate,
             primary_keepalive: self.primary_keepalive,
             community,
+            presence: (self.effective == Verdict::Game && self.gone_since.is_none())
+                .then(|| {
+                    let snap = self.presence.snapshot();
+                    (snap.confidence > 0).then_some(snap)
+                })
+                .flatten(),
+            menu_hint: (self.effective == Verdict::Game && self.gone_since.is_none())
+                .then(|| self.presence.menu_hint())
+                .flatten(),
         }
     }
 }

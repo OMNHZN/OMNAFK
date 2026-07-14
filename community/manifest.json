@@ -74,7 +74,80 @@
       "variants": ["Rockstar Games Launcher", "Steam", "Epic Games"],
       "reason": "Movement-key keepalive is usually less disruptive for open-world idle states.",
       "limitations": ["Online modes and launchers can change behavior after updates."],
-      "profile": "community/profiles/gta5.json"
+      "profile": "community/profiles/gta5.json",
+      "presence": {
+        "log": {
+          "paths": ["%USERPROFILE%\\Documents\\Rockstar Games\\GTA V\\*.log"],
+          "poll_secs": 5,
+          "in_game": ["starting game", "session started", "entering game"],
+          "menu": ["main menu", "returning to menu", "pause menu"]
+        },
+        "screen": {
+          "interval_secs": 4,
+          "variance_max_menu": 0.04,
+          "variance_min_game": 0.12
+        }
+      }
+    },
+    "minecraft.windows.exe": {
+      "name": "Minecraft (Bedrock)",
+      "family": "Minecraft",
+      "action": "W tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.82,
+      "detection_confidence": 0.88,
+      "action_confidence": 0.8,
+      "monitor_confidence": 0.7,
+      "reports": 25,
+      "top_keys": ["W", "SPACE"],
+      "fallback_order": ["FocusFlick", "CameraNudge"],
+      "monitor_style": "Preserve size",
+      "status": "watch",
+      "verified": "2026-06-17",
+      "variants": ["Microsoft Store", "Xbox app"],
+      "reason": "Bedrock edition window; log tail helps distinguish title screen from world.",
+      "limitations": ["Log paths vary by install channel."],
+      "presence": {
+        "log": {
+          "paths": ["%LOCALAPPDATA%\\Packages\\Microsoft.MinecraftUWP_8wekyb3d8bbwe\\LocalState\\logs\\*.log"],
+          "poll_secs": 4,
+          "in_game": ["joined world", "entering world", "spawned"],
+          "menu": ["title screen", "main menu", "sign in"]
+        }
+      }
+    },
+    "javaw.exe": {
+      "name": "Minecraft (Java)",
+      "family": "Minecraft",
+      "action": "W tap",
+      "interval": 540,
+      "send_without_focus": false,
+      "auto_fallback": true,
+      "adaptive": true,
+      "confidence": 0.8,
+      "detection_confidence": 0.85,
+      "action_confidence": 0.78,
+      "monitor_confidence": 0.68,
+      "reports": 30,
+      "top_keys": ["W"],
+      "fallback_order": ["FocusFlick"],
+      "monitor_style": "Preserve size",
+      "status": "watch",
+      "verified": "2026-06-17",
+      "variants": ["Vanilla", "MultiMC", "Prism Launcher"],
+      "reason": "Java edition via javaw.exe; latest.log is a reliable session signal.",
+      "limitations": ["Other Java games also use javaw.exe — pair with title heuristics."],
+      "presence": {
+        "log": {
+          "paths": ["%APPDATA%\\.minecraft\\logs\\latest.log"],
+          "poll_secs": 3,
+          "in_game": ["joined the game", "setting user", "logged in"],
+          "menu": ["stopping!", "disconnecting", "main menu"]
+        }
+      }
     }
   },
   "detection": {

@@ -58,6 +58,8 @@ pub struct GameEntry {
     pub variants: Vec<String>,
     pub reason: Option<String>,
     pub limitations: Vec<String>,
+    #[serde(default)]
+    pub presence: Option<crate::presence::PresenceRules>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -458,6 +460,13 @@ fn generate_client_id() -> String {
 pub fn game_entry<'a>(runtime: &'a CommunityRuntime, exe: &str) -> Option<&'a GameEntry> {
     let exe = exe.to_ascii_lowercase();
     runtime.manifest.as_ref()?.games.get(&exe)
+}
+
+pub fn presence_rules_for(
+    runtime: &CommunityRuntime,
+    exe: &str,
+) -> Option<crate::presence::PresenceRules> {
+    game_entry(runtime, exe).and_then(|entry| entry.presence.clone())
 }
 
 pub fn snapshot_for_exe(

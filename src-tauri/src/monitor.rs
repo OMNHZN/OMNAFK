@@ -425,6 +425,7 @@ mod tests {
             negative_class: false,
             elevated: None,
             gpu_active: false,
+            gpu_usage: None,
             audio_active: false,
         };
         let (x, y, w, h) = target_geometry(&window, &target, &facts, MonitorStyle::Preserve);

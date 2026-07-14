@@ -42,6 +42,10 @@ pub fn apply_config_value(config: &mut AppConfig, key: &str, value: Value) -> Re
                 crate::community::ensure_client_id(config);
             }
         }
+        "presence_log_enabled" => config.presence_log_enabled = bool_value(value, key)?,
+        "presence_screen_enabled" => config.presence_screen_enabled = bool_value(value, key)?,
+        "presence_memory_enabled" => config.presence_memory_enabled = bool_value(value, key)?,
+        "respect_presence" => config.respect_presence = bool_value(value, key)?,
         "auto_elevate" => config.auto_elevate = bool_value(value, key)?,
         "adaptive_min_samples" => {
             let samples = value.as_u64().ok_or_else(|| {

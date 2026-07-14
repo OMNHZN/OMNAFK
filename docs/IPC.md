@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.17",
+  "version": "0.1.18",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,16 +22,16 @@ All payloads are JSON (serde). Times are integer seconds.
   ],
   "update": {
     "repo": "OMNHZN/OMNAFK",
-    "current_version": "0.1.17",
-    "latest_version": "0.1.17",
-    "latest_tag": "v0.1.17",
-    "title": "OMNAFK v0.1.17",
-    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.17",
+    "current_version": "0.1.18",
+    "latest_version": "0.1.18",
+    "latest_tag": "v0.1.18",
+    "title": "OMNAFK v0.1.18",
+    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.18",
     "published_at": "2026-06-10T20:00:00Z",
     "prerelease": false,
     "update_available": true,
     "asset_name": "OMNAFK-Setup.exe",
-    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.17/OMNAFK-Setup.exe",
+    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.18/OMNAFK-Setup.exe",
     "notes_excerpt": "Short release notes excerpt.",
     "release_notes": "Longer release notes body for setup welcome screens."
   } | null,
@@ -54,6 +54,7 @@ All payloads are JSON (serde). Times are integer seconds.
         "platform_path": true, "known_game": false, "negative_class": false,
         "elevated": false | true | null,
         "gpu_active": false,
+        "gpu_usage": 42 | null,              // GPU utilization % from PDH, null when unknown
         "audio_active": false                // process is rendering audio (WASAPI)
       },
       "next_tick": 92 | null,              // per-target seconds to next keepalive
@@ -90,6 +91,19 @@ All payloads are JSON (serde). Times are integer seconds.
         "top_keys": ["SPACE", "W"],
         "monitor_note": "Borderless fullscreen works best for monitor placement.",
         "applied": true
+      } | null,
+      "menu_hint": {                       // legacy heuristic hint; also surfaced in presence.sources
+        "confidence": 78,                  // 0-100
+        "reason": "GPU load 7% vs 72% gameplay peak, title back to launch state"
+      } | null,
+      "presence": {                        // layered in-game vs menu (log, screen, memory, heuristic)
+        "state": "in_game" | "likely_menu" | "unknown",
+        "confidence": 88,                  // 0-100 stable confidence after debounce
+        "reason": "screen: frame variance 0.142",
+        "hold_keepalives": false,          // true when respect_presence + high-confidence menu
+        "sources": [
+          { "layer": "screen", "state": "in_game", "confidence": 88, "detail": "frame variance 0.142" }
+        ]
       } | null,
       "profile": {
         "action": "W tap" | null,
@@ -137,6 +151,10 @@ All payloads are JSON (serde). Times are integer seconds.
     "gamepad_kind": "Xbox 360" | "DualShock 4", // virtual pad type for the Gamepad nudge action
     "headless": false,
     "community_intelligence": false,
+    "presence_log_enabled": true,           // manifest log tail (requires cached manifest rules)
+    "presence_screen_enabled": true,        // local window thumbnail variance
+    "presence_memory_enabled": false,       // manifest memory reads (expert opt-in; at own risk)
+    "respect_presence": true,               // hold keepalives on high-confidence menu/lobby
     "always_mark_exes": ["mygame.exe"],
     "always_ignore_exes": ["zoom.exe"],
     "mark_title_contains": ["my game"],   // title substrings (lowercased) that force-mark
@@ -175,7 +193,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "suspend_hotkey": "CTRL+ALT+S" | "",          // empty string = no suspend hotkey
     "github_repo": "OMNHZN/OMNAFK",
     "check_updates_on_launch": true,
-    "ignored_update_tag": "v0.1.17" | null,
+    "ignored_update_tag": "v0.1.18" | null,
     "pinned": false,
     "last_tab": "general" | "targets" | "stats" | "settings" | "about",
     "settings_interface_collapsed": true,
