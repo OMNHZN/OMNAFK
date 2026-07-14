@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.18",
+  "version": "0.1.19",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,16 +22,16 @@ All payloads are JSON (serde). Times are integer seconds.
   ],
   "update": {
     "repo": "OMNHZN/OMNAFK",
-    "current_version": "0.1.18",
-    "latest_version": "0.1.18",
-    "latest_tag": "v0.1.18",
-    "title": "OMNAFK v0.1.18",
-    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.18",
+    "current_version": "0.1.19",
+    "latest_version": "0.1.19",
+    "latest_tag": "v0.1.19",
+    "title": "OMNAFK v0.1.19",
+    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.19",
     "published_at": "2026-06-10T20:00:00Z",
     "prerelease": false,
     "update_available": true,
     "asset_name": "OMNAFK-Setup.exe",
-    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.18/OMNAFK-Setup.exe",
+    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.19/OMNAFK-Setup.exe",
     "notes_excerpt": "Short release notes excerpt.",
     "release_notes": "Longer release notes body for setup welcome screens."
   } | null,
@@ -193,7 +193,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "suspend_hotkey": "CTRL+ALT+S" | "",          // empty string = no suspend hotkey
     "github_repo": "OMNHZN/OMNAFK",
     "check_updates_on_launch": true,
-    "ignored_update_tag": "v0.1.18" | null,
+    "ignored_update_tag": "v0.1.19" | null,
     "pinned": false,
     "last_tab": "general" | "targets" | "stats" | "settings" | "about",
     "settings_interface_collapsed": true,

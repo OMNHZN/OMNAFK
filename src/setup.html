@@ -6,7 +6,7 @@
 <title>OMNAFK Setup</title>
 <style>
   :root{
-    --bg:#000;--surface:#0A0A0A;--surface-2:#141414;--border:#1F1F1F;--border-strong:#333;
+    --bg:#000;--surface:#000000;--surface-2:#141414;--border:#262626;--border-strong:#333;
     --text:#FFF;--text-dim:#9A9A9A;--text-faint:#5C5C5C;--invert-bg:#FFF;--invert-text:#000;
     --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;--body:'Segoe UI',system-ui,sans-serif;
   }
@@ -72,7 +72,7 @@
 <div class="setup" data-tauri-drag-region>
   <div class="head" data-tauri-drag-region>
     <img class="glyph" src="assets/sentinel-dormant.png" alt="">
-    <span class="hname" id="headTitle">OMNAFK SETUP</span><span class="hver" id="headVersion">v0.1.18</span>
+    <span class="hname" id="headTitle">OMNAFK SETUP</span><span class="hver" id="headVersion">v0.1.19</span>
     <span class="sp"></span>
     <button class="x" id="closeBtn" aria-label="Cancel setup">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
@@ -128,7 +128,7 @@ const T=window.__TAURI__;
 const inv=(cmd,args)=>T?T.core.invoke(cmd,args):Promise.resolve(null);
 const $=id=>document.getElementById(id);
 const steps=[...document.querySelectorAll('.step')],pages=[...document.querySelectorAll('.page')];
-let state={mode:'install',version:'0.1.18',install_dir:'',payload_size:'payload',payload_embedded:false,install_kind:'fresh',is_downgrade:false,webview2_ok:true};
+let state={mode:'install',version:'0.1.19',install_dir:'',payload_size:'payload',payload_embedded:false,install_kind:'fresh',is_downgrade:false,webview2_ok:true};
 let cur=0, busy=false, finished=false, failed=false, confirming=false, downgradeConfirmed=false, savedFooter=null;
 let progressReady=Promise.resolve(), pollTimer=null, watchdogTimer=null, lastProgressAt=0, lastProgressKey='';
 
@@ -383,7 +383,7 @@ if(T){
   progressReady=T.event.listen('setup://progress',e=>handleProgress(e.payload)).catch(()=>null);
   inv('setup_state').then(s=>{state=s;applyMode()}).catch(showError);
 }else{
-  state={mode:'install',version:'0.1.18',install_dir:'%LOCALAPPDATA%\\OMNAFK',payload_size:'~24.1 MB on disk',
+  state={mode:'install',version:'0.1.19',install_dir:'%LOCALAPPDATA%\\OMNAFK',payload_size:'~24.1 MB on disk',
          payload_embedded:true,installed:false,installed_version:null,install_kind:'fresh',
          license_url:'https://github.com/OMNHZN/OMNAFK/blob/main/LICENSE',help_url:'https://github.com/OMNHZN/OMNAFK',
          start_with_windows:true,desktop_shortcut:false,vigem_available:false};

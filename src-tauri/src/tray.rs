@@ -267,6 +267,7 @@ fn compact_title(title: &str) -> String {
 enum IconKind {
     Active,
     Dormant,
+    Holding,
     Suspended,
 }
 
@@ -274,8 +275,8 @@ fn icon_kind(state: EngineStatus, blink_on: bool, attention: bool) -> IconKind {
     match state {
         EngineStatus::Active => IconKind::Active,
         // Holding is a normal, expected state (you're playing, or a gate is
-        // on) — show steady open eyes; the tooltip carries the detail.
-        EngineStatus::Holding => IconKind::Active,
+        // on) - show a steady half-awake icon instead of blinking.
+        EngineStatus::Holding => IconKind::Holding,
         EngineStatus::Suspended => IconKind::Suspended,
         EngineStatus::Dormant if attention && blink_on => IconKind::Active,
         _ => IconKind::Dormant,
@@ -285,6 +286,7 @@ fn icon_kind(state: EngineStatus, blink_on: bool, attention: bool) -> IconKind {
 fn icon_image(kind: IconKind) -> tauri::Result<Image<'static>> {
     match kind {
         IconKind::Active => Image::from_bytes(include_bytes!("../icons/sentinel-active.png")),
+        IconKind::Holding => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
         IconKind::Suspended => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
         IconKind::Dormant => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
     }

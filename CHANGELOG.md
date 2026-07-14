@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.19
+
+- Refined the flyout header so navigation, version, and pin controls fit in one cleaner bar.
+- Moved Sightline list actions into a compact actions menu with safer confirmation for bulk changes.
+- Grouped Smart presence settings behind a simple master control with a Tune option for advanced layers.
+- Collapsed lower-frequency Settings groups so startup, detection, hotkeys, and updates stay easier to scan.
+- Switched holding tray status to a steady half-awake icon instead of the open-eye state.
+- Sent engine notices through native Windows notifications so important events stay visible in Action Center.
+
 ## v0.1.18
 
 - Added presence sensing for menu/lobby vs in-session states using safe local signals.

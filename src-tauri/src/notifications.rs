@@ -1,6 +1,6 @@
 use crate::{flyout, ipc};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 pub const TOAST_EVENT: &str = "omnafk://toast";
 
@@ -74,19 +74,10 @@ impl QueuedNotice {
     }
 }
 
-/// Surface a notice to the user. When the flyout is open it's rendered as an
-/// in-app toast (with its action button); otherwise it's raised as a native
-/// Windows notification, which matches the OS and lands in the Action Center.
+/// Surface a notice to the user as a native Windows notification, so every
+/// engine event lands in the OS Action Center regardless of flyout state.
+/// In-app toasts remain only as direct feedback for buttons clicked in the UI.
 pub fn deliver(app: &AppHandle, notice: &QueuedNotice) {
-    let flyout_visible = app
-        .get_webview_window("flyout")
-        .is_some_and(|window| window.is_visible().unwrap_or(false));
-
-    if flyout_visible {
-        let _ = app.emit(TOAST_EVENT, notice.to_payload());
-        return;
-    }
-
     show_windows_notification(app, notice);
 }
 
