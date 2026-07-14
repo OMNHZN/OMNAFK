@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/github/flyout.png" alt="OMNAFK tray flyout" width="380">
+  <img src="assets/github/readme-hero.png" alt="OMNAFK desktop app preview" width="760">
 </p>
 
 <p align="center">
@@ -39,9 +39,11 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 
 - Sightline detects fullscreen, borderless, and game-platform windows automatically.
 - Star important Sightline targets so they stay at the top of the list.
+- Sightline actions live in a compact menu for rescan, testing, sorting, and bulk cleanup.
 - A first-run walkthrough explains Sightline, keepalive timing, safety controls, and where to replay the guide.
 - Target details explain why a window was marked and show adaptive action progress.
 - Presence details can show when supported games look in session, at a menu, or held.
+- Smart presence has one simple switch, with Tune controls for logs, local screen sampling, and menu holds.
 - Sends real keyboard/mouse input (`SendInput`) so keepalives work in virtually every game.
 - Optional virtual-gamepad nudges (via ViGEmBus) keep controller-gated games awake; controller activity also pauses keepalives while you play. See [docs/GAMEPAD.md](docs/GAMEPAD.md).
 - Restarts elevated automatically when a game runs as administrator (UAC prompt once).
@@ -53,8 +55,10 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Can move marked games to a preferred monitor, with per-target overrides and placement status.
 - Force-mark or ignore unusual windows with executable and title rules.
 - Includes dark and high-contrast interface themes.
+- Settings groups collapse around the everyday controls so startup, detection, hotkeys, updates, and app mode stay easier to scan.
 - The tray menu shows current state, target counts, and the next scheduled tick at a glance.
-- Native Windows notifications are used when the flyout is closed, while in-flyout notices keep their action buttons.
+- Holding uses a steady half-awake tray icon instead of blinking or looking fully active.
+- Engine notices use native Windows notifications so important events land in Action Center.
 - Update prompts can notify, wait for manual action, or install stable updates automatically on launch when OMNAFK is idle.
 - Control the running app from a script or Stream Deck by relaunching the exe with `--suspend`, `--resume`, `--toggle-suspend`, `--snooze <minutes>`, or `--rescan`.
 - Saves settings and target marks immediately.

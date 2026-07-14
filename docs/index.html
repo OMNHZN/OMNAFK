@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OMNAFK - Awake when you aren't</title>
-<meta name="description" content="OMNAFK is a tray-first Windows utility with quiet game-window detection, adaptive keepalive actions, monitor placement, live target details, and stable GitHub updates.">
+<meta name="description" content="OMNAFK is a tray-first Windows utility with Sightline detection, compact target controls, Smart presence, adaptive keepalive actions, monitor placement, and stable GitHub updates.">
 <meta property="og:title" content="OMNAFK">
-<meta property="og:description" content="A tray-first Windows utility that marks game windows, explains target status, learns safe per-game keepalive actions, places targets on your preferred monitor, and returns to dormancy.">
-<meta property="og:image" content="https://omnhzn.github.io/OMNAFK/assets/flyout.png">
+<meta property="og:description" content="A tray-first Windows utility that marks game windows, explains target status, learns safe per-game keepalive actions, and stays quiet in the tray.">
+<meta property="og:image" content="https://omnhzn.github.io/OMNAFK/assets/social-preview.png">
 <style>
   :root {
     color-scheme: dark;
@@ -179,7 +179,7 @@
     <section class="wrap hero-copy">
       <h1>OMNAFK</h1>
       <p class="tag">Awake when you aren't.</p>
-      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, explains what it sees, learns safe per-game keepalive actions, keeps targets on the monitor you prefer, and returns to dormancy when there is nothing to do.</p>
+      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, keeps target actions close by, explains what it sees, learns safe per-game keepalive actions, and returns to dormancy when there is nothing to do.</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/OMNHZN/OMNAFK/releases/latest">Download setup</a>
         <a class="button" href="#guide">Help guide</a>
@@ -202,7 +202,7 @@
       <div class="features">
         <article class="feature">
           <h3>SIGHTLINE</h3>
-          <p>No start button. OMNAFK marks game-like windows, shows why they were detected, and lets you star important targets so they stay easy to reach.</p>
+          <p>No start button. OMNAFK marks game-like windows, shows why they were detected, and keeps rescan, test, sort, and cleanup actions in one compact menu.</p>
         </article>
         <article class="feature">
           <h3>QUIET INPUT</h3>
@@ -214,7 +214,11 @@
         </article>
         <article class="feature">
           <h3>PRESENCE SENSING</h3>
-          <p>Supported targets can show whether a game looks in session, at a menu, or held, using local signals and community rules.</p>
+          <p>Smart presence gives supported targets one simple switch, with Tune controls for local log, screen, and menu-hold layers.</p>
+        </article>
+        <article class="feature">
+          <h3>STEADY TRAY</h3>
+          <p>The tray status stays readable: active, dormant, suspended, and holding now use calm steady states instead of noisy blinking.</p>
         </article>
         <article class="feature">
           <h3>GAMEPAD NUDGE</h3>
@@ -242,12 +246,12 @@
         <article class="shot">
           <img src="assets/app-sightline.png" alt="OMNAFK Sightline tab">
           <h3>SIGHTLINE</h3>
-          <p>See what OMNAFK sees, star a target, mark or ignore a window, pause a target, and review detection or placement details.</p>
+          <p>See what OMNAFK sees, mark or ignore a window, open the actions menu, star a target, and review detection or placement details.</p>
         </article>
         <article class="shot">
           <img src="assets/app-settings.png" alt="OMNAFK Settings tab">
           <h3>SETTINGS</h3>
-          <p>Control launch behavior, native Windows notifications, detection sensitivity, elevation prompts, update checks, and import/export.</p>
+          <p>Control launch behavior, native Windows notifications, detection sensitivity, Smart presence, elevation prompts, update checks, and import/export.</p>
         </article>
         <article class="shot">
           <img src="assets/app-about.png" alt="OMNAFK About tab">
@@ -272,10 +276,10 @@
         <article class="guide-panel">
           <h3>COMMON QUESTIONS</h3>
           <ul class="guide-list">
-            <li><b>Nothing shows up?</b> Open the game window, then press Rescan in Sightline.</li>
+            <li><b>Nothing shows up?</b> Open the game window, then use Rescan from the Sightline actions menu.</li>
             <li><b>Wrong window marked?</b> Set it to ignored. OMNAFK remembers your choice.</li>
             <li><b>Do not want focus changes?</b> Leave Hold while I'm playing on. For expert cases, Background-only mode is available under Advanced.</li>
-            <li><b>Playing right now?</b> Hold while I'm playing pauses sends after recent input.</li>
+            <li><b>Playing right now?</b> Hold while I'm playing pauses sends after recent input, and the tray shows a steady half-awake state while holding.</li>
             <li><b>Using more than one monitor?</b> Choose monitor placement in Keepalive, then override single targets from Sightline when needed.</li>
             <li><b>Need help?</b> Check Troubleshooting first, then use Bug report from About so the report opens with the right template.</li>
           </ul>
@@ -299,7 +303,7 @@
         </article>
         <article class="faq-item">
           <h3>What if nothing appears?</h3>
-          <p>Open the game window and press Rescan in Sightline. If it still does not appear, report it from About so the issue opens with the right template.</p>
+          <p>Open the game window and use Rescan from the Sightline actions menu. If it still does not appear, report it from About so the issue opens with the right template.</p>
         </article>
         <article class="faq-item">
           <h3>Does it need admin?</h3>
@@ -315,7 +319,7 @@
         </article>
         <article class="faq-item">
           <h3>Can I test it before stepping away?</h3>
-          <p>Yes. Use <b>Test all</b> in Sightline to check active targets before you leave the game idle.</p>
+          <p>Yes. Use <b>Test all</b> from the Sightline actions menu to check active targets before you leave the game idle.</p>
         </article>
         <article class="faq-item">
           <h3>Where are settings kept?</h3>
@@ -367,11 +371,13 @@
         <div><b>Monitor placement</b>Choose a global display, then see whether each target is waiting, moved, or already on target.</div>
         <div><b>Adaptive actions</b>Let OMNAFK learn from a safe key whitelist, then watch each game's learning progress from Sightline.</div>
         <div><b>Detection details</b>Use Sightline's Why? view to see scoring, signal hits, and the sensitivity threshold in effect.</div>
+        <div><b>Sightline actions</b>Open one compact menu for rescan, test all, ignore shown targets, reset overrides, and sorting.</div>
+        <div><b>Smart presence</b>Use one simple switch for menu/lobby awareness, then Tune the individual local signal layers only when needed.</div>
         <div><b>Test all</b>Send a quick check to active targets before you step away, so a bad action is easier to catch early.</div>
         <div><b>Gamepad support</b>Use controller activity sensing by default, and enable Gamepad nudge only for games that need it.</div>
         <div><b>Title rules</b>Force-mark or ignore windows by title when an app uses a launcher, wrapper, or unusual process name.</div>
         <div><b>Themes</b>Choose dark or high contrast while keeping the same compact tray-first layout.</div>
-        <div><b>Safety pauses</b>Hold on recent input, pause on battery, or use quiet hours.</div>
+        <div><b>Safety pauses</b>Hold on recent input, pause on battery, or use quiet hours; holding uses a steady half-awake tray icon.</div>
         <div><b>Stable updates</b>Check releases, ignore an update, or let OMNAFK install stable updates automatically on launch.</div>
         <div><b>Diagnostics</b>Copy diagnostics or open a bug report when something needs attention.</div>
         <div><b>Tray and shortcuts</b>Open the flyout, check updates, suspend, resume, quit, or use launch flags for shortcuts and Stream Deck buttons.</div>

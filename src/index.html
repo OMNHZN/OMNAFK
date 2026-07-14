@@ -176,7 +176,8 @@
   .pic{width:16px;height:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:3px;flex:none;
        font-family:var(--mono);font-size:9px;color:var(--text-dim);display:grid;place-items:center}
   .ttitle{font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .texe{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:none}
+  .texe{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:none;max-width:92px;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .emptystate{display:none;flex-direction:column;align-items:center;gap:10px;padding:48px 16px;color:var(--text-faint)}
   .emptystate.show{display:flex}
   .emptystate .et{font-size:13px}
@@ -1508,7 +1509,7 @@ function targetRow(st,w,offline){
   else if(!offline&&!w.gone&&w.effective==='game'&&!w.paused&&w.next_tick!=null)meta.textContent='⏱ '+fmt(w.next_tick);
   if(w.elevated_mismatch)meta.textContent='⚠ admin';
   else if(w.community?.applied)meta.textContent='crowd';
-  else if(w.community?.label)meta.textContent='crowd?';
+  else if(w.community?.label)meta.textContent='profile?';
   else if(w.health_warning)meta.textContent='⚠ failing';
   else if(w.primary_keepalive===false&&w.effective==='game'&&!w.gone)meta.textContent='alt window';
   else if(w.presence?.hold_keepalives&&w.effective==='game'&&!w.gone&&!w.paused)meta.textContent='presence hold';
