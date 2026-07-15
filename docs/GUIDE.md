@@ -28,18 +28,18 @@ Use the filter to switch between marked, ignored, hidden, and all visible window
 
 ## Keepalive
 
-The General tab controls how OMNAFK keeps a marked game awake.
+The Keepalive tab controls how OMNAFK keeps a marked game awake.
 
 | Setting | What it changes |
 | --- | --- |
-| Interval | How often OMNAFK may send a keepalive while idle |
-| Randomize timing | Adds small timing variation |
-| Action | Default keepalive action |
-| Adaptive action | Learns movement keys and prefers what fits the game |
-| Send without focus | Sends input without bringing the game forward when supported |
-| Hold while I'm playing | Skips keepalives while you are actively using the PC |
+| How often | How long OMNAFK waits between keepalives while idle |
+| Vary timing | Adds small timing variation |
+| What to send | Default keepalive action |
+| Learn my keys | Learns movement keys and prefers what fits the game |
+| Expert: no focus flick | Sends input without bringing the game forward when supported |
+| Don't interrupt me | Keeps moving the next send forward while you are actively playing |
 
-Adaptive action starts with the selected default and improves after enough local samples. It stays per game.
+Learn my keys starts with the selected default and improves after enough local samples. It stays per game. Sightline shows the next planned action, and each target can use **Gentle only** when movement or bound-key input is undesirable.
 
 ## Monitor Placement
 

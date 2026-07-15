@@ -187,12 +187,12 @@ The universal building block of every tab.
 
 | Row | Label | Control | Default | Help text |
 |---|---|---|---|---|
-| 1 | Interval | Dropdown: 30 sec · 1 min · 2 min · 5 min · 9 min · 14 min · Custom… | 9 min | How often OMNAFK sends the keepalive action to each armed target. "Custom…" opens an inline numeric field (10–3600 sec). |
-| 2 | Randomize timing | Toggle | On | Adds ±15% random jitter to the interval so actions don't fire on a perfectly regular clock. |
-| 3 | Action | Dropdown: Space tap · W tap · Camera nudge (mouse) · Key sequence… · Per-target… | Space tap | What input is sent. "Key sequence…" lets you record up to 4 keys. "Per-target…" defers to each target's profile on the Targets tab. |
-| 4 | Adaptive action | Toggle | On | Learns a small whitelist of keys used while a marked game is focused, then uses that per-game profile after enough samples. Explicit per-target actions take priority. |
-| 5 | Send without focus | Toggle | On | Posts input directly to the target window so your active work is never interrupted. If a game ignores background input, disable this to use brief focus-flick mode. |
-| 6 | Pause while I'm active | Toggle | On | If you've touched the target window in the last 60 seconds, OMNAFK skips the tick — it never fights you for the controls. |
+| 1 | How often | Dropdown: 30 sec · 1 min · 2 min · 5 min · 9 min · 14 min · Custom… | 9 min | How long OMNAFK waits between keepalives. "Custom…" opens an inline numeric field (10–3600 sec). |
+| 2 | Snooze | Dropdown: Off · 30 min · 1 hour · 2 hours | Off | Temporarily pauses watching and resumes automatically. |
+| 3 | What to send | Dropdown: Space tap · W tap · Camera nudge · Mouse wiggle · Scroll tick · Right click · Gamepad nudge · Key sequence… · Per-target… | W tap | The input used for each cycle. |
+| 4 | Learn my keys | Toggle | On | Learns a small whitelist of keys used while a marked game is focused, then uses that per-game profile after enough samples. |
+| 5 | Don't interrupt me | Toggle | On | Keeps moving a focused target's next send forward while genuine keyboard, mouse, or controller input continues. |
+| 6 | Wait time | Dropdown | 1 min | How long after the last genuine input before keepalives resume. |
 
 Below the rows: a hairline divider, then centered fine print (Data 11px, `--text-faint`): `Settings save automatically.`
 
@@ -212,7 +212,8 @@ Each list row (40px): verdict pill · process glyph · window title · process n
   - `IGNORED` — transparent pill, `--border-strong` border, `--text-faint` text (detected as non-game or forced off)
   - `AUTO` is not a visible state; rows the user has never touched show the detector's verdict with a small hollow dot before the word. Once clicked, the dot disappears (the verdict is now pinned) and a further click cycles GAME → IGNORED → back to auto (dot returns).
 - Help (`?`) in the tab header explains the cycle in one sentence.
-- Row hover reveals a `profile` ghost button → inline expander with Action override and Interval override dropdowns ("Use global" default).
+- Each row opens an inline profile with **What to send**, **How often**, **Gentle only**, and **Don't interrupt me**. Less-used adaptive, monitor, wait, send mode, retry, detection, and key-sequence controls live behind **More**.
+- Marked rows preview the next planned keepalive. Occasional commands such as Stats, Move to monitor, Reset learning, and Share profile live in a compact overflow menu.
 - A row whose game closed stays listed for 60 s, dimmed, suffixed `(closed)`, then drops off. Pinned overrides persist forever by process name + window class, so a re-launched game is re-recognized instantly.
 - Empty state: centered crosshair icon in `--text-faint`, text `Nothing running. OMNAFK is watching.`
 
@@ -226,6 +227,7 @@ All numbers in Data type, large where noted.
 - Row: `Actions sent` → e.g. `26`.
 - Row: `Longest unbroken streak` → e.g. `01:58:03`.
 - Divider, then a per-target mini-table (only armed targets): columns Target (Body 12px) · Uptime (Data) · Actions (Data). Max 5 rows visible, scrolls.
+- Action rows can include a probable-kick count when a kept-alive game disappeared while the user was away.
 - Bottom: secondary button `Reset statistics` (confirm inline: button label changes to `Click again to confirm` for 3 s).
 
 ### 5.4 Settings

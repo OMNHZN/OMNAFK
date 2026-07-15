@@ -28,11 +28,10 @@ Modules: `detector.rs`, `keepalive.rs`, `config.rs`.
   (rect vs monitor work area, loaded graphics DLLs via module snapshot,
   exe path, GPU usage via PDH `GPU Engine` counters), score with a pure
   function, threshold by sensitivity (Strict/Standard/Broad).
-- Keepalive per §11: per-game timer (interval + ±15% jitter when enabled),
-  default action Space tap via `PostMessage(WM_KEYDOWN/WM_KEYUP)`;
-  focus-flick fallback behind a config flag. "Hold while playing": skip the
-  tick if the target is foreground and the user sent input in the last 60s
-  (`GetForegroundWindow` + `GetLastInputInfo` heuristic).
+- Keepalive per §11: per-game timer (interval + optional jitter), default W tap
+  through `SendInput`, adaptive or per-target actions, and a guarded focus-flick
+  path for background targets. "Don't interrupt me" moves a focused target's
+  next send forward while genuine keyboard, mouse, or controller input continues.
 - Log every verdict and every tick at `info`.
 
 **Accept:** with a known game running (e.g. GTA V or a platform title), engine logs `GAME` for it and `IGNORED` for the
@@ -45,7 +44,7 @@ PostMessage.
 ## Phase 2 — Tray + flyout shell
 
 `tray.rs`, `flyout.rs`. Tauri tray with the Sentinel icon states (§10.2: dormant /
-active "eyes lit" / holding blink / suspended faded — pre-rendered ICOs in
+active "eyes lit" / holding half-awake / suspended faded — pre-rendered ICOs in
 `src-tauri/icons/`, swapped at runtime). Frameless 380×560 always-on-top window,
 no taskbar button, positioned per §3 (anchored above tray, all four taskbar edges,
 clamped to work area), slide-up 150ms, dismiss on blur/Esc, pin per §3.2.

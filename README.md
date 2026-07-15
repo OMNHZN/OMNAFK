@@ -42,6 +42,8 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Sightline actions live in a compact menu for rescan, testing, sorting, and bulk cleanup.
 - A first-run walkthrough explains Sightline, keepalive timing, safety controls, and where to replay the guide.
 - Target details explain why a window was marked and show adaptive action progress.
+- Sightline previews the next action planned for each marked game.
+- Per-game **Gentle only** profiles can limit a target to pointer-based keepalives.
 - Presence details can show when supported games look in session, at a menu, or held.
 - Smart presence has one simple switch, with Tune controls for logs, local screen sampling, and menu holds.
 - Sends real keyboard/mouse input (`SendInput`) so keepalives work in virtually every game.
@@ -49,6 +51,8 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Restarts elevated automatically when a game runs as administrator (UAC prompt once).
 - Ships built-in profiles for dozens of games (GTA V, Minecraft, Fortnite, Valorant, CS2, platform titles, and more).
 - Learns your movement keys quickly (20 samples) and switches to adaptive keepalives per game.
+- Slides the next keepalive forward while you continue using the focused game, including controller input.
+- Flags probable AFK kicks and tracks which action was last used so weak actions are easier to spot.
 - Test all active targets before you step away.
 - Optional community profiles can add shared detection hints and proven settings.
 - Skips ticks only for the focused game while there is recent user input, so it stays out of your way while you are playing without starving background targets.
@@ -57,7 +61,7 @@ OMNAFK watches your visible windows, marks the ones that look like games, and ke
 - Includes dark and high-contrast interface themes.
 - Settings groups collapse around the everyday controls so startup, detection, hotkeys, updates, and app mode stay easier to scan.
 - The tray menu shows current state, target counts, and the next scheduled tick at a glance.
-- Holding uses a steady half-awake tray icon instead of blinking or looking fully active.
+- Holding uses a steady half-awake tray icon, and update attention stays steady instead of blinking.
 - Engine notices use native Windows notifications so important events land in Action Center.
 - Update prompts can notify, wait for manual action, or install stable updates automatically on launch when OMNAFK is idle.
 - Control the running app from a script or Stream Deck by relaunching the exe with `--suspend`, `--resume`, `--toggle-suspend`, `--snooze <minutes>`, or `--rescan`.
@@ -72,7 +76,7 @@ Download `OMNAFK-Setup.exe` from the [latest release](https://github.com/OMNHZN/
 
 The app is connected to [OMNHZN/OMNAFK](https://github.com/OMNHZN/OMNAFK). The Settings tab can check releases, install stable updates, open the repository, and start a bug report.
 
-New stable version tags, such as `v0.1.19`, build and attach the custom setup executable to GitHub Releases.
+New stable version tags, such as `v0.1.20`, build and attach the custom setup executable to GitHub Releases.
 
 <details>
 <summary>Screenshots</summary>
@@ -114,9 +118,9 @@ Local installer builds are written to `dist\OMNAFK-Setup.exe`.
 <summary>Release checklist</summary>
 
 ```powershell
-git tag v0.1.19
+git tag v0.1.20
 git push origin main
-git push origin v0.1.19
+git push origin v0.1.20
 ```
 
 GitHub Actions builds the Windows installer and publishes it to GitHub Releases. See [docs/RELEASING.md](docs/RELEASING.md) for the full release checklist.

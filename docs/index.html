@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OMNAFK - Awake when you aren't</title>
-<meta name="description" content="OMNAFK is a tray-first Windows utility with Sightline detection, compact target controls, Smart presence, adaptive keepalive actions, monitor placement, and stable GitHub updates.">
+<meta name="description" content="OMNAFK is a tray-first Windows utility with Sightline detection, per-game keepalive controls, input-aware timing, monitor placement, and stable updates.">
 <meta property="og:title" content="OMNAFK">
-<meta property="og:description" content="A tray-first Windows utility that marks game windows, explains target status, learns safe per-game keepalive actions, and stays quiet in the tray.">
+<meta property="og:description" content="A tray-first Windows utility that marks game windows, previews each keepalive, learns per-game actions, and stays quiet in the tray.">
 <meta property="og:image" content="https://omnhzn.github.io/OMNAFK/assets/social-preview.png">
 <style>
   :root {
@@ -182,7 +182,7 @@
     <section class="wrap hero-copy">
       <h1>OMNAFK</h1>
       <p class="tag">Awake when you aren't.</p>
-      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, keeps target actions close by, explains what it sees, learns safe per-game keepalive actions, and returns to dormancy when there is nothing to do.</p>
+      <p class="lead">A tray-first Windows utility with a quiet Sightline: it marks game-like windows, shows what it plans to send, learns per-game keepalives, and returns to dormancy when there is nothing to do.</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/OMNHZN/OMNAFK/releases/latest">Download setup</a>
         <a class="button" href="#guide">Help guide</a>
@@ -192,7 +192,7 @@
     </section>
     <div class="quick">
       <span>Windows 10 / 11</span>
-      <span>Stable v0.1.19</span>
+      <span>Stable v0.1.20</span>
       <a href="https://github.com/OMNHZN/OMNAFK/releases">Releases</a>
       <a href="https://github.com/OMNHZN/OMNAFK">Source code</a>
     </div>
@@ -209,11 +209,11 @@
         </article>
         <article class="feature">
           <h3>QUIET INPUT</h3>
-          <p>Keepalives use real keyboard and mouse input by default, then hold when you are actively playing so the app stays out of your way.</p>
+          <p>Keepalives use real keyboard and mouse input by default, then keep moving the next send forward while you are actively playing.</p>
         </article>
         <article class="feature">
           <h3>ADAPTIVE ACTIONS</h3>
-          <p>OMNAFK can learn a small whitelist of keys you actually use per game, then show when that profile is ready.</p>
+          <p>OMNAFK can learn a small whitelist of keys you use per game, then show the next action before it is sent.</p>
         </article>
         <article class="feature">
           <h3>PRESENCE SENSING</h3>
@@ -228,8 +228,8 @@
           <p>Controller-gated games can use an optional virtual gamepad nudge, while real controller activity still pauses keepalives.</p>
         </article>
         <article class="feature">
-          <h3>WALKTHROUGH</h3>
-          <p>A short first-run guide explains Sightline, keepalive timing, safety controls, and where to replay the tour later.</p>
+          <h3>GENTLE PER GAME</h3>
+          <p>Targets such as Roblox can be capped to pointer-based keepalives that do not move a character or trigger bound keys.</p>
         </article>
       </div>
     </div>
@@ -244,12 +244,12 @@
         <article class="shot">
           <img src="assets/app-general.png" alt="OMNAFK Keepalive tab">
           <h3>KEEPALIVE</h3>
-          <p>Set the interval, action, play-aware holds, recovery behavior, and monitor placement from one organized tab.</p>
+          <p>Set how often to act, what to send, play-aware waiting, recovery behavior, and monitor placement from one organized tab.</p>
         </article>
         <article class="shot">
           <img src="assets/app-sightline.png" alt="OMNAFK Sightline tab">
           <h3>SIGHTLINE</h3>
-          <p>See what OMNAFK sees, mark or ignore a window, open the actions menu, star a target, and review detection or placement details.</p>
+          <p>See what OMNAFK sees, preview the next action, mark or ignore a window, and tune gentle or advanced behavior per game.</p>
         </article>
         <article class="shot">
           <img src="assets/app-settings.png" alt="OMNAFK Settings tab">
@@ -281,8 +281,8 @@
           <ul class="guide-list">
             <li><b>Nothing shows up?</b> Open the game window, then use Rescan from the Sightline actions menu.</li>
             <li><b>Wrong window marked?</b> Set it to ignored. OMNAFK remembers your choice.</li>
-            <li><b>Do not want focus changes?</b> Leave Hold while I'm playing on. For expert cases, Background-only mode is available under Advanced.</li>
-            <li><b>Playing right now?</b> Hold while I'm playing pauses sends after recent input, and the tray shows a steady half-awake state while holding.</li>
+            <li><b>Do not want interruptions?</b> Leave Don't interrupt me on. For expert cases, no focus flick is available under Advanced.</li>
+            <li><b>Playing right now?</b> Don't interrupt me keeps moving the next send forward while input continues, and the tray shows a steady half-awake state.</li>
             <li><b>Using more than one monitor?</b> Choose monitor placement in Keepalive, then override single targets from Sightline when needed.</li>
             <li><b>Need help?</b> Check Troubleshooting first, then use Bug report from About so the report opens with the right template.</li>
           </ul>
@@ -302,7 +302,7 @@
         </article>
         <article class="faq-item">
           <h3>Does it always press Space?</h3>
-          <p>No. W tap is the default action, common games can use built-in hints, and adaptive action can learn a small safe key profile for each marked game when there are enough samples.</p>
+          <p>No. W tap is the default action, common games can use built-in hints, and Learn my keys can build a small local profile for each marked game. Gentle only can restrict one game to pointer-based input.</p>
         </article>
         <article class="faq-item">
           <h3>What if nothing appears?</h3>
@@ -314,7 +314,7 @@
         </article>
         <article class="faq-item">
           <h3>What if keepalives keep failing?</h3>
-          <p>Sightline shows a health warning after repeated failures. Keep <b>Auto-fallback</b> on in Keepalive so OMNAFK can try another action for that game this session.</p>
+          <p>Sightline shows a health warning after repeated failures. Keep <b>Softer retry</b> on so OMNAFK can try another action, and check Stats for probable kick counts.</p>
         </article>
         <article class="faq-item">
           <h3>Can I force a game to be marked?</h3>
@@ -359,7 +359,7 @@
         <article class="flow-step">
           <b>04</b>
           <h3>KEEP ALIVE</h3>
-          <p>OMNAFK sends the selected quiet action, or a learned per-game action when the profile is ready.</p>
+          <p>OMNAFK sends the previewed quiet action, or a learned per-game action when the profile is ready.</p>
         </article>
       </div>
     </div>
@@ -370,9 +370,9 @@
       <p class="eyebrow">CONTROL</p>
       <h2>Preferences stay yours.</h2>
       <div class="control-list">
-        <div><b>Target profiles</b>Choose a different action or interval for a specific marked window, then check its details at any time.</div>
+        <div><b>Target profiles</b>Choose a different action or interval for one marked window, enable Gentle only, and check the next action at any time.</div>
         <div><b>Monitor placement</b>Choose a global display, then see whether each target is waiting, moved, or already on target.</div>
-        <div><b>Adaptive actions</b>Let OMNAFK learn from a safe key whitelist, then watch each game's learning progress from Sightline.</div>
+        <div><b>Learn my keys</b>Let OMNAFK learn from a local key whitelist, then watch each game's progress and next action from Sightline.</div>
         <div><b>Detection details</b>Use Sightline's Why? view to see scoring, signal hits, and the sensitivity threshold in effect.</div>
         <div><b>Sightline actions</b>Open one compact menu for rescan, test all, ignore shown targets, reset overrides, and sorting.</div>
         <div><b>Smart presence</b>Use one simple switch for menu/lobby awareness, then Tune the individual local signal layers only when needed.</div>
@@ -380,7 +380,7 @@
         <div><b>Gamepad support</b>Use controller activity sensing by default, and enable Gamepad nudge only for games that need it.</div>
         <div><b>Title rules</b>Force-mark or ignore windows by title when an app uses a launcher, wrapper, or unusual process name.</div>
         <div><b>Themes</b>Choose dark or high contrast while keeping the same compact tray-first layout.</div>
-        <div><b>Safety pauses</b>Hold on recent input, pause on battery, or use quiet hours; holding uses a steady half-awake tray icon.</div>
+        <div><b>Safety pauses</b>Wait on recent input, pause on battery, or use quiet hours; holding uses a steady half-awake tray icon.</div>
         <div><b>Stable updates</b>Check releases, ignore an update, or let OMNAFK install stable updates automatically on launch.</div>
         <div><b>Diagnostics</b>Copy diagnostics or open a bug report when something needs attention.</div>
         <div><b>Tray and shortcuts</b>Open the flyout, check updates, suspend, resume, quit, or use launch flags for shortcuts and Stream Deck buttons.</div>
@@ -399,7 +399,7 @@
         </article>
         <article class="feature">
           <h3>PER-GAME TUNING</h3>
-          <p>Override one target without changing the rest of the app: action, interval, monitor, send mode, or detection sensitivity.</p>
+          <p>Override one target without changing the rest of the app: action, interval, Gentle only, monitor, send mode, or detection sensitivity.</p>
         </article>
         <article class="feature">
           <h3>CONTROLLER SETUPS</h3>
@@ -432,7 +432,7 @@
   </section>
 
   <footer>
-    <div class="wrap">v0.1.19 - MIT license - Windows 10/11 - For my Kitty ♡</div>
+    <div class="wrap">v0.1.20 - MIT license - Windows 10/11 - For my Kitty ♡</div>
   </footer>
 </body>
 </html>

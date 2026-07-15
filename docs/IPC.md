@@ -10,7 +10,7 @@ All payloads are JSON (serde). Times are integer seconds.
 
 ```jsonc
 {
-  "version": "0.1.19",
+  "version": "0.1.20",
   "engine": "dormant" | "active" | "holding" | "suspended",
   "next_tick": 412 | null,
   "error": "Couldn't send input to game.exe — …" | null,
@@ -22,16 +22,16 @@ All payloads are JSON (serde). Times are integer seconds.
   ],
   "update": {
     "repo": "OMNHZN/OMNAFK",
-    "current_version": "0.1.19",
-    "latest_version": "0.1.19",
-    "latest_tag": "v0.1.19",
-    "title": "OMNAFK v0.1.19",
-    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.19",
+    "current_version": "0.1.20",
+    "latest_version": "0.1.20",
+    "latest_tag": "v0.1.20",
+    "title": "OMNAFK v0.1.20",
+    "url": "https://github.com/OMNHZN/OMNAFK/releases/tag/v0.1.20",
     "published_at": "2026-06-10T20:00:00Z",
     "prerelease": false,
     "update_available": true,
     "asset_name": "OMNAFK-Setup.exe",
-    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.19/OMNAFK-Setup.exe",
+    "asset_url": "https://github.com/OMNHZN/OMNAFK/releases/download/v0.1.20/OMNAFK-Setup.exe",
     "notes_excerpt": "Short release notes excerpt.",
     "release_notes": "Longer release notes body for setup welcome screens."
   } | null,
@@ -71,6 +71,7 @@ All payloads are JSON (serde). Times are integer seconds.
       "consecutive_failures": 0,
       "success_rate": 92 | null,
       "primary_keepalive": true,
+      "next_action": "Adaptive (W/SPACE)" | "Mouse wiggle (this game)" | "MOUSE WIGGLE · GENTLE" | null,
       "community": {
         "label": "Community · Space tap · 95%",
         "name": "Roblox",
@@ -114,7 +115,8 @@ All payloads are JSON (serde). Times are integer seconds.
         "hold_while_playing": true | false | null,
         "hold_window_secs": 30 | 60 | 300 | null,
         "send_without_focus": true | false | null,
-        "auto_fallback": true | false | null
+        "auto_fallback": true | false | null,
+        "safe_actions": true | null
       },
       "monitor": {
         "target": "Monitor 2 (1920×1080)" | null,
@@ -131,6 +133,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "lifetime_kept": 86400,                // persisted across restarts
     "lifetime_actions": 412,
     "actions_by_type": { "Space tap": 20, "Mouse wiggle": 6 },
+    "suspected_kicks": { "Space tap": 1 },
     "daily": [ { "date": "2026-06-10", "seen": 2, "actions": 26, "kept": 13632 } ],
     "lifetime_games": [ { "identity": "eldenring.exe\u001fFLUX", "title": "ELDEN RING™", "kept": 86400, "actions": 412 } ]
   },
@@ -193,7 +196,7 @@ All payloads are JSON (serde). Times are integer seconds.
     "suspend_hotkey": "CTRL+ALT+S" | "",          // empty string = no suspend hotkey
     "github_repo": "OMNHZN/OMNAFK",
     "check_updates_on_launch": true,
-    "ignored_update_tag": "v0.1.19" | null,
+    "ignored_update_tag": "v0.1.20" | null,
     "pinned": false,
     "last_tab": "general" | "targets" | "stats" | "settings" | "about",
     "settings_interface_collapsed": true,
@@ -236,7 +239,7 @@ Lifetime statistics persist separately in `stats.json` next to the config.
 | `test_alert` | — | Send a test away-from-keyboard alert to the configured ntfy/Discord channels. Returns a summary string or an error. No state emit. |
 | `reset_learning` | `{ exe, wclass }` | Wipe the adaptive input profile learned for that target. Persist. Emit state. |
 | `list_monitors` | — | Return connected displays: `[{ device, label, primary, width, height }]`. |
-| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor?, adaptive?, hold_while_playing?, hold_window_secs?, send_without_focus?, auto_fallback?, sensitivity? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. `adaptive`, `hold_while_playing`, `send_without_focus`, and `auto_fallback`: `null` uses global; `true`/`false` overrides per target. `hold_window_secs`: `null` uses global; otherwise 10–3600 seconds. `sensitivity`: `null` or `"Use global"` uses global detection sensitivity; otherwise `"Strict"`, `"Standard"`, or `"Broad"` overrides the auto-detect threshold for this target only. Emit state. |
+| `set_target_profile` | `{ exe, wclass, action?, interval?, key_sequence?, monitor?, adaptive?, hold_while_playing?, hold_window_secs?, send_without_focus?, auto_fallback?, sensitivity?, safe_actions? }` | Set per-target profile overrides. `action: null` or omit clears action. `interval: null` clears interval. `monitor: null` or `"Use global"` uses global monitor rule; `"Don't move"` skips this target; otherwise pass a `device` string from `list_monitors`. `adaptive`, `hold_while_playing`, `send_without_focus`, and `auto_fallback`: `null` uses global; `true`/`false` overrides per target. `hold_window_secs`: `null` uses global; otherwise 10–3600 seconds. `sensitivity`: `null` or `"Use global"` uses global detection sensitivity; otherwise `"Strict"`, `"Standard"`, or `"Broad"` overrides the auto-detect threshold for this target only. `safe_actions: true` caps the target to pointer-based keepalives; `null` clears the cap. Emit state. |
 | `move_target` | `{ exe, wclass }` | Move one tracked window onto its configured monitor immediately. Emit state. |
 | `apply_preset` | `{ name }` | Apply a named preset (`Walking simulator`, `Long interval (Space)`, `Camera AFK`, `Mouse only`). Legacy alias `Roblox` maps to Long interval (Space). Persist. Emit state. |
 | `save_user_preset` | `{ name }` | Snapshot current global keepalive settings — including monitor placement (on/off, style, timing, skip-while-active) — into a user-named preset (max 10). Persist. Emit state. |

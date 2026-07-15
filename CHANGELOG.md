@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.20
+
+- Added per-game **Gentle only** profiles that cap keepalives to pointer-based actions.
+- Changed the Roblox preset to use a mouse wiggle so keepalives do not move the character or cancel emotes.
+- Added a next-action preview to Sightline so each marked game shows what OMNAFK plans to send.
+- Made play-aware timing slide forward while genuine keyboard, mouse, or controller input is still active.
+- Added probable AFK-kick notices and action-level kick counts to help identify ineffective keepalives.
+- Moved occasional target commands into a compact overflow menu and grouped less-used profile controls under **More**.
+- Replaced the dormant update blink with a steady attention eye and kept holding on the half-awake icon.
+- Simplified Keepalive labels and removed the detached introductory caption above Timing.
+
 ## v0.1.19
 
 - Refined the flyout header so navigation, version, and pin controls fit in one cleaner bar.

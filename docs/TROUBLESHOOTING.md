@@ -23,10 +23,12 @@ If OMNAFK offers to restart as administrator, approve the prompt. You can turn t
 
 If the target is marked but keepalives still fail:
 
-1. Try a different action in **Keepalive**.
-2. Keep **Auto-fallback** enabled.
-3. Leave **Hold while I'm playing** enabled so OMNAFK does not send while you are actively using the PC.
+1. Try a different **What to send** action in **Keepalive**.
+2. Keep **Softer retry** enabled.
+3. Leave **Don't interrupt me** enabled so OMNAFK moves the next send forward while you are actively playing.
 4. Check the target details in Sightline for warnings.
+
+For games where movement keys cancel an emote or move the character, open the target details in Sightline and turn on **Gentle only**.
 
 ## Start With Windows
 
@@ -60,4 +62,3 @@ When opening an issue, include:
 - Executable name if visible
 - What tab or setting you were using
 - Screenshot when it helps explain the problem
-
