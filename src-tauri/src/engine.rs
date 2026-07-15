@@ -4,7 +4,8 @@ use crate::{
     audio::WasapiAudioProbe,
     community::{self, CommunityGameSnapshot, SharedCommunity},
     config::{
-        AppConfig, OverrideVerdict, ResolvedAction, ResolvedMonitor, Sensitivity, TargetProfile,
+        AppConfig, KeepaliveAction, OverrideVerdict, ResolvedAction, ResolvedMonitor, Sensitivity,
+        TargetProfile,
     },
     detector::{self, DetectedWindow, Verdict, WindowFacts},
     gpu::PdhGpuProbe,
@@ -53,6 +54,12 @@ const GATE_RECHECK_SECS: u64 = 30;
 /// How soon a presence-held (menu/lobby) tick is re-checked, so a wrong or
 /// stale menu read can't starve keepalives for a whole interval.
 const PRESENCE_RECHECK_SECS: u64 = 45;
+/// Input younger than this counts as "happening now" when sliding a focused
+/// target's tick timer (covers the 5s detection cycle with headroom).
+const INPUT_KEEPALIVE_WINDOW: Duration = Duration::from_secs(6);
+/// No input for this long means the user is away; a kept-alive game that
+/// vanishes in that state is flagged as a probable AFK kick.
+const USER_AWAY_FOR_KICK: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -81,6 +88,7 @@ pub struct GameProfileSnapshot {
     pub hold_window_secs: Option<u64>,
     pub send_without_focus: Option<bool>,
     pub auto_fallback: Option<bool>,
+    pub safe_actions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -115,6 +123,10 @@ pub struct GameSnapshot {
     pub consecutive_failures: u32,
     pub success_rate: Option<u8>,
     pub primary_keepalive: bool,
+    /// What the next keepalive will send and why, e.g. "W tap" or
+    /// "Adaptive (your keys)" or "Mouse wiggle (safe cap)".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community: Option<CommunityGameSnapshot>,
     /// Layered presence: in-game vs menu (log, screen, memory, heuristic).
@@ -241,6 +253,8 @@ struct TrackedWindow {
     logged_recent_input_hold: bool,
     /// Dedupes per-stretch "Held tick: presence menu/lobby" activity logs.
     logged_presence_hold: bool,
+    /// Label of the last successful keepalive, for kick attribution.
+    last_action_label: Option<String>,
     /// Layered in-game vs menu detection for this window.
     presence: presence::PresenceTracker,
 }
@@ -979,9 +993,9 @@ impl Engine {
                 inner.last_error = None;
                 inner.push_log(
                     "action",
-                    format!("Sent {} to {}", plan.log_label, plan.title),
+                    format!("SENT {} → {}", plan.log_label, plan.title),
                 );
-                Ok(format!("Sent {} to {}", plan.label, plan.title))
+                Ok(format!("SENT {} → {}", plan.label, plan.title))
             }
             Err(error) => {
                 if let Some(window) = inner.windows.get_mut(&plan.identity) {
@@ -1230,6 +1244,7 @@ impl EngineInner {
                     last_injected_input_tick: None,
                     logged_recent_input_hold: false,
                     logged_presence_hold: false,
+                    last_action_label: None,
                 });
 
             if let Some(window) = self.windows.get_mut(&identity) {
@@ -1267,10 +1282,54 @@ impl EngineInner {
             }
         }
 
+        // A kept-alive game vanishing while nobody is at the keyboard is the
+        // signature of an AFK kick (or a crash) — surface it with the action
+        // that was in use instead of letting the session die silently.
+        let user_away = activity
+            .last_input_age(now)
+            .is_none_or(|age| age > USER_AWAY_FOR_KICK);
+        let engine_running = !self.config.suspended && self.snooze_until.is_none();
+        let mut kicks: Vec<(String, u64, Option<String>)> = Vec::new();
         for (identity, window) in self.windows.iter_mut() {
             if !seen.contains(identity) && window.gone_since.is_none() {
                 window.gone_since = Some(now);
+                if engine_running
+                    && user_away
+                    && window.effective == Verdict::Game
+                    && window.actions > 0
+                    && !self.config.is_paused(&window.exe, &window.wclass)
+                {
+                    kicks.push((
+                        window.title.clone(),
+                        window.uptime,
+                        window.last_action_label.clone(),
+                    ));
+                }
             }
+        }
+        for (title, uptime, last_action) in kicks {
+            let action_note = last_action
+                .as_deref()
+                .map(|label| format!(" Last: {label}."))
+                .unwrap_or_default();
+            let text = format!(
+                "KICK? — {title} closed after {} while you were away.{action_note}",
+                format_uptime(uptime)
+            );
+            self.push_log("error", text.clone());
+            if let Some(label) = &last_action {
+                self.stats.note_suspected_kick(label);
+            }
+            if !matches!(
+                self.config.notifications,
+                crate::config::NotificationLevel::None
+            ) {
+                self.push_notice(QueuedNotice::error(
+                    text.clone(),
+                    Some(ToastAction::OpenFlyout),
+                ));
+            }
+            crate::alerts::send(&self.config, "OMNAFK: KICK?", &text);
         }
 
         self.windows.retain(|_, window| {
@@ -1323,6 +1382,7 @@ impl EngineInner {
                         window.warmup_sends = window.warmup_sends.saturating_add(1);
                         window.rotation_index = window.rotation_index.wrapping_add(1);
                         window.health.note_success();
+                        window.last_action_label = Some(plan.label.clone());
                     }
                     self.stats
                         .note_action_result(&plan.identity, &plan.title, &plan.label, true);
@@ -1354,7 +1414,7 @@ impl EngineInner {
                     self.last_error = None;
                     self.push_log(
                         "action",
-                        format!("Sent {} to {}", plan.log_label, plan.title),
+                        format!("SENT {} → {}", plan.log_label, plan.title),
                     );
                     if plan.was_first_action && notify_all {
                         self.push_notice(QueuedNotice::success(format!(
@@ -1481,9 +1541,9 @@ impl EngineInner {
             if armed != window.was_armed {
                 window.was_armed = armed;
                 let text = if armed {
-                    format!("{} marked as game", window.title)
+                    format!("ARMED — {}", window.title)
                 } else {
-                    format!("{} no longer active", window.title)
+                    format!("DISARMED — {}", window.title)
                 };
                 events.push(text);
             }
@@ -1567,10 +1627,10 @@ impl EngineInner {
         let gate = self.compute_gate(now, activity);
         if gate != self.gate_reason {
             match &gate {
-                Some(reason) => self.push_log("info", format!("Held ticks: {reason}")),
+                Some(reason) => self.push_log("info", format!("HOLDING — {reason}")),
                 None => {
                     if self.gate_reason.is_some() {
-                        self.push_log("info", "Resumed ticks".to_string());
+                        self.push_log("info", "RESUMED — ALL TARGETS".to_string());
                     }
                 }
             }
@@ -1582,12 +1642,12 @@ impl EngineInner {
                 Some(reason) if gate_is_alertworthy(reason) => {
                     crate::alerts::send(
                         &self.config,
-                        "OMNAFK paused",
+                        "OMNAFK — HOLDING",
                         &format!("Keepalives paused — {reason}."),
                     );
                 }
                 None if was_alertworthy => {
-                    crate::alerts::send(&self.config, "OMNAFK resumed", "Keepalives resumed.");
+                    crate::alerts::send(&self.config, "OMNAFK — RESUMED", "Keepalives resumed.");
                 }
                 _ => {}
             }
@@ -1689,6 +1749,23 @@ impl EngineInner {
                 continue;
             };
 
+            // Input-aware scheduling: while the focused game is receiving
+            // genuine input (keyboard, mouse, or controller), its own idle
+            // clock keeps resetting — so slide the next synthetic tick to a
+            // full interval past that input instead of ticking on a fixed
+            // clock. Ticks then only fire once the player is genuinely idle.
+            if options.hold_while_playing
+                && activity.foreground_window() == Some(target.hwnd)
+                && (keepalive::genuine_recent_user_input(
+                    now,
+                    activity,
+                    INPUT_KEEPALIVE_WINDOW,
+                    ignore_input_tick,
+                ) || gamepad_age.is_some_and(|age| age <= INPUT_KEEPALIVE_WINDOW))
+            {
+                timer.reschedule(now, &options, rng);
+            }
+
             let presence_hold = window.presence.should_hold_keepalives();
 
             match keepalive::tick_decision(
@@ -1709,10 +1786,8 @@ impl EngineInner {
                     holding = true;
                     if !window.logged_recent_input_hold {
                         window.logged_recent_input_hold = true;
-                        log_entries.push((
-                            "info".into(),
-                            format!("Held tick: recent input for {title}"),
-                        ));
+                        log_entries
+                            .push(("info".into(), format!("HOLDING — YOU'RE PLAYING ({title})")));
                     }
                     timer.reschedule(now, &options, rng);
                 }
@@ -1726,10 +1801,7 @@ impl EngineInner {
                     holding = true;
                     if !window.logged_presence_hold {
                         window.logged_presence_hold = true;
-                        log_entries.push((
-                            "info".into(),
-                            format!("Held tick: presence menu/lobby for {title}"),
-                        ));
+                        log_entries.push(("info".into(), format!("HOLDING — AT MENU ({title})")));
                     }
                     // Re-check soon: if presence flips back to in-game (or was
                     // wrong), the next keepalive shouldn't be an interval away.
@@ -1746,7 +1818,7 @@ impl EngineInner {
                     window.logged_recent_input_hold = false;
                     window.logged_presence_hold = false;
                     if resume_hold {
-                        log_entries.push(("info".into(), format!("Resumed tick for {title}")));
+                        log_entries.push(("info".into(), format!("RESUMED — {title}")));
                     }
                     let was_first_action = window.actions == 0;
                     pending_sends.push(KeepaliveSendPlan {
@@ -1833,6 +1905,11 @@ impl TrackedWindow {
             .cloned()
             .unwrap_or_default();
 
+        let next_action =
+            (self.effective == Verdict::Game && self.gone_since.is_none()).then(|| {
+                describe_next_action(config, &profile, learned.as_ref(), &self.exe, &self.wclass)
+            });
+
         GameSnapshot {
             title: if self.gone_since.is_some() {
                 format!("{} (closed)", self.title)
@@ -1867,6 +1944,7 @@ impl TrackedWindow {
             consecutive_failures: self.health.consecutive_failures,
             success_rate,
             primary_keepalive: self.primary_keepalive,
+            next_action,
             community,
             presence: (self.effective == Verdict::Game && self.gone_since.is_none())
                 .then(|| {
@@ -1893,6 +1971,29 @@ struct KeepaliveResolveContext<'a> {
 }
 
 fn resolve_keepalive_action(
+    ctx: KeepaliveResolveContext<'_>,
+    rng: &mut impl rand::Rng,
+) -> (ResolvedAction, bool, String, String) {
+    let safe_only = ctx
+        .config
+        .profile_for(ctx.exe, ctx.wclass)
+        .and_then(|profile| profile.safe_actions)
+        .unwrap_or(false);
+    let (action, send_without_focus, label, log_label) =
+        resolve_keepalive_action_unrestricted(ctx, rng);
+    // The safe-actions cap is the last word: whatever the profile, adaptive
+    // learner, or fallback ladder picked, a restricted game only ever
+    // receives pointer-only input.
+    if safe_only && !action.is_pointer_only() {
+        let action = ResolvedAction::MouseWiggle;
+        let label = action.label();
+        let log_label = format!("{label} · GENTLE");
+        return (action, send_without_focus, label, log_label);
+    }
+    (action, send_without_focus, label, log_label)
+}
+
+fn resolve_keepalive_action_unrestricted(
     ctx: KeepaliveResolveContext<'_>,
     rng: &mut impl rand::Rng,
 ) -> (ResolvedAction, bool, String, String) {
@@ -1982,6 +2083,70 @@ fn resolved_from_label(label: &str) -> Option<ResolvedAction> {
     }
 }
 
+/// Human-readable preview of what the next keepalive will send, mirroring the
+/// precedence in `resolve_keepalive_action` (profile > adaptive > global) plus
+/// the safe-actions cap. Adaptive picks are randomized at send time, so the
+/// preview names the source rather than one exact key.
+fn describe_next_action(
+    config: &AppConfig,
+    profile: &TargetProfile,
+    learned: Option<&LearnedSnapshot>,
+    exe: &str,
+    wclass: &str,
+) -> String {
+    let (label, pointer_only) = if let Some(action) = profile.action {
+        (
+            format!("{} (this game)", action.label()),
+            action.is_pointer_only(),
+        )
+    } else if config.adaptive_enabled(exe, wclass) && learned.is_some_and(|l| l.active) {
+        let keys = learned
+            .map(|l| {
+                l.top
+                    .iter()
+                    .take(2)
+                    .map(|k| k.key.clone())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .unwrap_or_default();
+        if keys.is_empty() {
+            ("Adaptive (your keys)".to_string(), false)
+        } else {
+            (format!("Adaptive ({keys})"), false)
+        }
+    } else if config.rotate_actions {
+        ("Rotating actions".to_string(), false)
+    } else {
+        let action = config.action;
+        (
+            action.label().to_string(),
+            matches!(
+                action,
+                KeepaliveAction::CameraNudge
+                    | KeepaliveAction::MouseWiggle
+                    | KeepaliveAction::ScrollTick
+            ),
+        )
+    };
+    if profile.safe_actions.unwrap_or(false) && !pointer_only {
+        return "MOUSE WIGGLE · GENTLE".to_string();
+    }
+    label
+}
+
+fn format_uptime(secs: u64) -> String {
+    let hours = secs / 3600;
+    let minutes = (secs % 3600) / 60;
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m")
+    } else if minutes > 0 {
+        format!("{minutes}m")
+    } else {
+        format!("{secs}s")
+    }
+}
+
 fn profile_snapshot(profile: &TargetProfile, config: &AppConfig) -> GameProfileSnapshot {
     GameProfileSnapshot {
         action: profile.action.map(|action| action.label().to_string()),
@@ -1996,6 +2161,7 @@ fn profile_snapshot(profile: &TargetProfile, config: &AppConfig) -> GameProfileS
         hold_window_secs: profile.hold_window_secs,
         send_without_focus: profile.send_without_focus,
         auto_fallback: profile.auto_fallback,
+        safe_actions: profile.safe_actions,
     }
 }
 
@@ -2127,6 +2293,7 @@ fn sleep_until_next_cycle(stop: &AtomicBool, interval: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{rngs::StdRng, SeedableRng};
 
     #[test]
     #[ignore = "Runs the real detector loop for 15 seconds."]
@@ -2144,6 +2311,37 @@ mod tests {
         assert!(!logged);
         logged = true;
         assert!(logged);
+    }
+
+    #[test]
+    fn gentle_profile_caps_key_actions_to_mouse_wiggle() {
+        let mut config = AppConfig {
+            action: KeepaliveAction::WTap,
+            ..AppConfig::default()
+        };
+        config.profile_for_mut("game.exe", "GAME").safe_actions = Some(true);
+        let stats = Stats::default();
+        let base = config.resolve_keepalive("game.exe", "GAME").action;
+        let health = KeepaliveHealth::default();
+        let mut rng = StdRng::seed_from_u64(1);
+
+        let (action, _, label, log_label) = resolve_keepalive_action(
+            KeepaliveResolveContext {
+                config: &config,
+                stats: &stats,
+                identity: "game.exe\u{1f}GAME",
+                exe: "game.exe",
+                wclass: "GAME",
+                base: &base,
+                health: &health,
+                community_entry: None,
+            },
+            &mut rng,
+        );
+
+        assert_eq!(action, ResolvedAction::MouseWiggle);
+        assert_eq!(label, "Mouse wiggle");
+        assert!(log_label.contains("GENTLE"));
     }
 
     #[test]

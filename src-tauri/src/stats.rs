@@ -33,6 +33,9 @@ pub struct PersistedStats {
     pub actions_by_date: BTreeMap<String, u64>,
     pub kept_by_date: BTreeMap<String, u64>,
     pub per_game: BTreeMap<String, GameTotals>,
+    /// Probable AFK kicks by the keepalive action in use when the game
+    /// vanished — surfaces which actions a game's anti-AFK ignores.
+    pub suspected_kicks: BTreeMap<String, u64>,
     pub learned: BTreeMap<String, LearnedProfile>,
 }
 
@@ -76,6 +79,7 @@ pub struct StatsSnapshot {
     pub lifetime_kept: u64,
     pub lifetime_actions: u64,
     pub actions_by_type: BTreeMap<String, u64>,
+    pub suspected_kicks: BTreeMap<String, u64>,
     pub daily: Vec<DayStat>,
     pub lifetime_games: Vec<GameTotalsSnapshot>,
 }
@@ -143,6 +147,16 @@ impl Stats {
         } else {
             game.actions_fail = game.actions_fail.saturating_add(1);
         }
+        self.dirty = true;
+    }
+
+    /// Record a probable AFK kick against the action that was in use.
+    pub fn note_suspected_kick(&mut self, action_label: &str) {
+        *self
+            .persisted
+            .suspected_kicks
+            .entry(action_label.to_string())
+            .or_default() += 1;
         self.dirty = true;
     }
 
@@ -295,6 +309,7 @@ impl Stats {
             lifetime_kept: self.persisted.lifetime_kept,
             lifetime_actions: self.persisted.lifetime_actions,
             actions_by_type: self.actions_by_type.clone(),
+            suspected_kicks: self.persisted.suspected_kicks.clone(),
             daily,
             lifetime_games,
         }
@@ -396,6 +411,19 @@ mod tests {
         // Lifetime survives a session reset.
         assert_eq!(snap.lifetime_kept, 30);
         assert_eq!(snap.longest_streak, 30);
+    }
+
+    #[test]
+    fn suspected_kick_counts_persist() {
+        let mut stats = Stats::default();
+        stats.note_suspected_kick("W tap");
+        stats.note_suspected_kick("W tap");
+
+        let json = serde_json::to_string(stats.persisted()).expect("serialize");
+        let persisted: PersistedStats = serde_json::from_str(&json).expect("deserialize");
+        let revived = Stats::with_persisted(persisted);
+
+        assert_eq!(revived.snapshot().suspected_kicks.get("W tap"), Some(&2));
     }
 
     #[test]

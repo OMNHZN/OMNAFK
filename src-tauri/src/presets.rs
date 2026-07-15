@@ -22,13 +22,25 @@ pub fn apply_preset(config: &mut AppConfig, name: &str) -> Result<(), String> {
             config.hold_while_playing = true;
             config.auto_fallback = true;
         }
-        "Long interval (Space)" | "Roblox" => {
+        "Long interval (Space)" => {
             config.interval = 540;
             config.action = KeepaliveAction::SpaceTap;
             config.adaptive_actions = true;
             config.adaptive_min_samples = 50;
             config.adaptive_learn_sequences = true;
             config.adaptive_learn_actions = true;
+            config.send_without_focus = false;
+            config.hold_while_playing = true;
+            config.auto_fallback = true;
+            config.monitor_style = MonitorStyle::Preserve;
+        }
+        // Legacy alias. Roblox's 20-minute AFK timer resets on any input, but
+        // key taps move the character and cancel emotes — so this preset now
+        // sticks to a pointer-only wiggle instead of Space.
+        "Roblox" => {
+            config.interval = 540;
+            config.action = KeepaliveAction::MouseWiggle;
+            config.adaptive_actions = false;
             config.send_without_focus = false;
             config.hold_while_playing = true;
             config.auto_fallback = true;
@@ -212,8 +224,10 @@ mod tests {
     fn legacy_roblox_preset_alias_still_applies() {
         let mut config = AppConfig::default();
         apply_preset(&mut config, "Roblox").expect("legacy alias");
-        assert_eq!(config.action, KeepaliveAction::SpaceTap);
+        // Pointer-only: key taps move/emote a Roblox character.
+        assert_eq!(config.action, KeepaliveAction::MouseWiggle);
         assert_eq!(config.interval, 540);
+        assert!(!config.adaptive_actions);
     }
 
     #[test]

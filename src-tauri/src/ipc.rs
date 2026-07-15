@@ -642,6 +642,7 @@ pub fn set_target_profile(
     send_without_focus: Option<bool>,
     auto_fallback: Option<bool>,
     sensitivity: Option<String>,
+    safe_actions: Option<bool>,
     app: AppHandle,
     engine: State<'_, SharedEngine>,
 ) -> Result<StatePayload, String> {
@@ -687,6 +688,7 @@ pub fn set_target_profile(
         profile.hold_while_playing = hold_while_playing;
         profile.send_without_focus = send_without_focus;
         profile.auto_fallback = auto_fallback;
+        profile.safe_actions = safe_actions;
         profile.hold_window_secs = match hold_window_secs {
             Some(secs) if (10..=3600).contains(&secs) => Some(secs),
             Some(_) => {

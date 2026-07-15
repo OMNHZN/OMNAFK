@@ -143,22 +143,15 @@ fn handle_tray_event(tray: &TrayIcon<Wry>, event: TrayIconEvent, _engine: &Share
 
 fn spawn_tray_state_loop(tray: TrayIcon<Wry>, engine: SharedEngine, app: AppHandle) {
     thread::spawn(move || {
-        let blink = AtomicBool::new(false);
         let mut last_icon: Option<IconKind> = None;
         loop {
-            let fast = attention_active();
-            thread::sleep(if fast {
-                Duration::from_millis(500)
-            } else {
-                Duration::from_secs(1)
-            });
+            thread::sleep(Duration::from_secs(1));
             let snapshot = engine.snapshot();
-            let blink_on = blink.fetch_xor(true, Ordering::SeqCst);
             let state = snapshot.engine;
 
             // Only swap the icon when it actually changes; re-setting the
             // same image every second causes a visible tray repaint flicker.
-            let kind = icon_kind(state, blink_on, fast);
+            let kind = icon_kind(state, attention_active());
             if last_icon != Some(kind) {
                 if let Ok(icon) = icon_image(kind) {
                     let _ = tray.set_icon(Some(icon));
@@ -269,16 +262,19 @@ enum IconKind {
     Dormant,
     Holding,
     Suspended,
+    /// Something wants a glance (e.g. update ready): a steady half-faded
+    /// open eye — noticeable on scan, but never blinking.
+    Attention,
 }
 
-fn icon_kind(state: EngineStatus, blink_on: bool, attention: bool) -> IconKind {
+fn icon_kind(state: EngineStatus, attention: bool) -> IconKind {
     match state {
         EngineStatus::Active => IconKind::Active,
         // Holding is a normal, expected state (you're playing, or a gate is
         // on) - show a steady half-awake icon instead of blinking.
         EngineStatus::Holding => IconKind::Holding,
         EngineStatus::Suspended => IconKind::Suspended,
-        EngineStatus::Dormant if attention && blink_on => IconKind::Active,
+        EngineStatus::Dormant if attention => IconKind::Attention,
         _ => IconKind::Dormant,
     }
 }
@@ -289,5 +285,15 @@ fn icon_image(kind: IconKind) -> tauri::Result<Image<'static>> {
         IconKind::Holding => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
         IconKind::Suspended => Image::from_bytes(include_bytes!("../icons/sentinel-suspended.png")),
         IconKind::Dormant => Image::from_bytes(include_bytes!("../icons/sentinel-dormant.png")),
+        IconKind::Attention => {
+            let base = Image::from_bytes(include_bytes!("../icons/sentinel-active.png"))?;
+            let width = base.width();
+            let height = base.height();
+            let mut rgba = base.rgba().to_vec();
+            for pixel in rgba.chunks_exact_mut(4) {
+                pixel[3] /= 2;
+            }
+            Ok(Image::new_owned(rgba, width, height))
+        }
     }
 }

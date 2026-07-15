@@ -63,6 +63,14 @@ impl TargetAction {
             Self::KeySequence => "Key sequence…",
         }
     }
+
+    /// See [`ResolvedAction::is_pointer_only`].
+    pub const fn is_pointer_only(self) -> bool {
+        matches!(
+            self,
+            Self::CameraNudge | Self::MouseWiggle | Self::ScrollTick
+        )
+    }
 }
 
 impl KeepaliveAction {
@@ -104,6 +112,11 @@ pub struct TargetProfile {
     pub auto_fallback: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sensitivity: Option<Sensitivity>,
+    /// When true, every keepalive for this game — configured, adaptive, or
+    /// fallback — is capped to pointer-only actions that can't move a
+    /// character or trigger bound keys (emote/idle games).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safe_actions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -496,6 +509,16 @@ impl ResolvedAction {
             Self::KeySequence(keys) => format!("Keys {}", keys.join("+")),
         }
     }
+
+    /// Pointer-move-only actions: they can't walk a character, jump, cancel
+    /// an emote, or trigger bound keys. These are what a "safe actions"
+    /// profile allows through.
+    pub fn is_pointer_only(&self) -> bool {
+        matches!(
+            self,
+            Self::CameraNudge | Self::MouseWiggle | Self::ScrollTick
+        )
+    }
 }
 
 impl Default for AppConfig {
@@ -779,6 +802,7 @@ impl AppConfig {
             && profile.send_without_focus.is_none()
             && profile.auto_fallback.is_none()
             && profile.sensitivity.is_none()
+            && profile.safe_actions.is_none()
         {
             if let Some(classes) = self.profiles.get_mut(&exe_key) {
                 classes.remove(wclass);
