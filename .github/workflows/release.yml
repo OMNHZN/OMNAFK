@@ -59,3 +59,37 @@ jobs:
             dist/OMNAFK-Setup.exe
             dist/OMNAFK-Setup.exe.sha256
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: Keep the two newest stable releases
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+            Accept = "application/vnd.github+json"
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            "X-GitHub-Api-Version" = "2026-03-10"
+          }
+          $repo = "${{ github.repository }}"
+          $releases = Invoke-RestMethod `
+            -Headers $headers `
+            -Uri "https://api.github.com/repos/$repo/releases?per_page=100"
+          $stale = $releases |
+            Where-Object { -not $_.draft -and -not $_.prerelease } |
+            Sort-Object published_at -Descending |
+            Select-Object -Skip 2
+
+          foreach ($release in $stale) {
+            Invoke-RestMethod `
+              -Method Delete `
+              -Headers $headers `
+              -Uri "https://api.github.com/repos/$repo/releases/$($release.id)"
+            try {
+              Invoke-RestMethod `
+                -Method Delete `
+                -Headers $headers `
+                -Uri "https://api.github.com/repos/$repo/git/refs/tags/$($release.tag_name)"
+            } catch {
+              if ($_.Exception.Response.StatusCode -ne 404) { throw }
+            }
+          }

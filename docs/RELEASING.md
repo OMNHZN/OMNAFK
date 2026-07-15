@@ -25,7 +25,8 @@ git push origin v0.1.20
 The `Release` workflow builds the custom `dist/OMNAFK-Setup.exe` executable and
 attaches it to the GitHub release. If `docs/releases/<tag>.md` exists, those
 notes become the GitHub release body. OMNAFK's Settings tab checks that release
-feed and opens the newest installer asset when an update is available.
+feed and opens the newest installer asset when an update is available. After a
+successful publish, the workflow keeps the newest two stable releases and tags.
 
 For a local release build:
 
